@@ -48,6 +48,27 @@ INSTALLED_APPS = [
 
 ]
 
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}
+
+# sensible JWT defaults; tweak as you wish
+from datetime import timedelta
+SIMPLE_JWT = {
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,          # requires blacklist app if you also set BLACKLIST_AFTER_ROTATION
+    "BLACKLIST_AFTER_ROTATION": True,       # set True only if token_blacklist in INSTALLED_APPS + migrated
+    "ALGORITHM": "HS256",
+    "SIGNING_KEY": SECRET_KEY,              # or an env var; default is your Django SECRET_KEY
+    "AUTH_HEADER_TYPES": ("Bearer",),
+}
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
