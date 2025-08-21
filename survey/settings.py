@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     "apps.core",
     "apps.accounts",
     "apps.surveys",
-    "apps.sessions",
+    "apps.survey_sessions",
     "apps.responses",
     "apps.system",
 
