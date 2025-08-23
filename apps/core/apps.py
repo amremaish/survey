@@ -5,7 +5,7 @@ from typing import Optional, Dict
 from django.apps import AppConfig
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.utils import OperationalError, ProgrammingError
+from django.db.utils import OperationalError, ProgrammingError, IntegrityError
 
 
 class CoreConfig(AppConfig):
@@ -25,7 +25,7 @@ class CoreConfig(AppConfig):
                 admin = self._ensure_superuser(logger, creds)
                 self._ensure_roles_and_assign(logger, admin)
 
-        except (OperationalError, ProgrammingError):
+        except (OperationalError, ProgrammingError, IntegrityError):
             logger.info("Database not ready; skipping superuser bootstrap")
 
 
@@ -44,23 +44,48 @@ class CoreConfig(AppConfig):
         return {"username": username, "email": email or "", "password": password}
 
     def _ensure_superuser(self, logger, creds: Dict[str, str]):
-        """Create the superuser if missing; return the user instance."""
+        """Create the superuser if missing; return the user instance.
+        Safe for concurrent startup across multiple processes/containers.
+        """
         User = get_user_model()
         username, email, password = creds["username"], creds["email"], creds["password"]
 
-        user = User.objects.filter(username=username).first()
-        if user:
-            logger.info("Superuser '%s' already exists; skipping", username)
-            return user
+        try:
+            user, created = User.objects.get_or_create(
+                username=username,
+                defaults={
+                    "email": email,
+                    "is_superuser": True,
+                    "is_staff": True,
+                },
+            )
+        except IntegrityError:
+            # Another process created it at the same time
+            logger.info("Race detected creating superuser '%s'; fetching existing", username)
+            user = User.objects.get(username=username)
+            created = False
 
-        # create explicitly as superuser/staff
-        user = User.objects.create_user(username=username, email=email)
-        user.is_superuser = True
-        user.is_staff = True
-        user.set_password(password)
-        user.save(update_fields=["is_superuser", "is_staff", "password", "email"])
+        if created:
+            user.set_password(password)
+            user.save(update_fields=["password"])
+            logger.info("Created superuser '%s'", username)
+        else:
+            updates = []
+            if not user.is_superuser:
+                user.is_superuser = True
+                updates.append("is_superuser")
+            if not user.is_staff:
+                user.is_staff = True
+                updates.append("is_staff")
+            if email and user.email != email:
+                user.email = email
+                updates.append("email")
+            if updates:
+                user.save(update_fields=updates)
+                logger.info("Updated superuser '%s' fields: %s", username, updates)
+            else:
+                logger.info("Superuser '%s' already exists; skipping", username)
 
-        logger.info("Created superuser '%s'", username)
         return user
 
     def _ensure_roles_and_assign(self, logger, admin_user):
