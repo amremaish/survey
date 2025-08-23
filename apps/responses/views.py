@@ -74,9 +74,7 @@ class SubmitResponseView(APIView):
         return Response(SurveyResponseReadSerializer(resp).data, status=status.HTTP_201_CREATED)
 
 class ResponseDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
-    required_roles = [Roles.VIEWER.value]
-
+    permission_classes = [permissions.IsAuthenticated]
     @extend_schema(
         description="Get a single response with decrypted answers for users in the same organization.",
         examples=[
