@@ -1,6 +1,8 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions, status
+from apps.core.permissions import HasAllRoles
+from apps.core.enums import Roles
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
 
@@ -50,7 +52,8 @@ class SubmitResponseView(APIView):
         return Response(SurveyResponseReadSerializer(resp).data, status=status.HTTP_201_CREATED)
 
 class ResponseDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.VIEWER.value]
 
     def get(self, request, response_id: int):
         resp = get_object_or_404(SurveyResponse.objects.select_related("survey").prefetch_related("answers"), pk=response_id)
@@ -62,7 +65,8 @@ class ResponseDetailView(APIView):
 
 
 class OrgResponsesDashboardView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.VIEWER.value]
 
     def get(self, request, org_id: int):
         # Ensure requesting user is a member of the organization

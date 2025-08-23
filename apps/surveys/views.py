@@ -1,19 +1,14 @@
 from __future__ import annotations
-
-from typing import Optional, Iterable, List
-
-from django.core.paginator import Paginator
+from typing import List
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
-from django.utils.text import slugify
-from django.utils.crypto import get_random_string
-from django.conf import settings
 from .tasks import create_invitations_task
 from rest_framework import status, permissions
+from apps.core.permissions import HasAllRoles
 from django.core.paginator import Paginator
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from apps.accounts.models import OrganizationMember
 from .models import (
     Survey, SurveySection, SurveyQuestion, SurveyQuestionOption, SurveyStatus,
     SurveyInvitation, InvitationStatus
@@ -32,11 +27,8 @@ from apps.core.utility import (
     sort_order_conflict_exists as _sort_order_conflict_exists,
 )
 from apps.core.serializer import PaginationQuerySerializer
+from apps.core.enums import Roles
 
-
-# ---------------------------------------------------------------------------
-# Views
-# ---------------------------------------------------------------------------
 
 class SurveyListCreateView(APIView):
     """
@@ -51,7 +43,8 @@ class SurveyListCreateView(APIView):
           Organization can be provided as serializer field or request.data["organization_id"].
           Auto-generates a unique `code` from the title.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles_by_method = {"GET": [Roles.VIEWER.value], "POST": [Roles.EDITOR.value]}
 
     def get(self, request):
         qs = (
@@ -127,7 +120,8 @@ class SurveyDetailView(APIView):
     PATCH: Partial update; organization cannot be cleared to null.
     DELETE: Remove survey.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles_by_method = {"GET": [Roles.VIEWER.value], "PATCH": [Roles.EDITOR.value], "DELETE": [Roles.EDITOR.value]}
 
     def get(self, request, survey_id: int):
         survey = get_object_or_404(
@@ -177,7 +171,8 @@ class SectionCreateView(APIView):
     """
     POST: Create a section under a specific survey.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.EDITOR.value]
 
     @transaction.atomic
     def post(self, request, survey_id: int):
@@ -194,7 +189,8 @@ class QuestionCreateView(APIView):
          - Enforces unique sort_order within the section (friendly error before DB).
          - Auto-generates a fallback code (e.g., q-<id>) when not provided.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.EDITOR.value]
 
     @transaction.atomic
     def post(self, request, section_id: int):
@@ -237,7 +233,8 @@ class OptionCreateView(APIView):
              }
          - Bulk create uses `bulk_create` for efficiency.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.EDITOR.value]
 
     @transaction.atomic
     def post(self, request, question_id: int):
@@ -271,7 +268,8 @@ class QuestionUpdateView(APIView):
     PATCH: Update question attributes.
           - Enforces unique sort_order inside the section (friendly error).
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.EDITOR.value]
 
     @transaction.atomic
     def patch(self, request, question_id: int):
@@ -300,7 +298,8 @@ class QuestionDetailView(APIView):
     """
     GET: Return a single question with its options.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.VIEWER.value]
 
     def get(self, request, question_id: int):
         q = get_object_or_404(
@@ -311,7 +310,8 @@ class QuestionDetailView(APIView):
 
 
 class InvitationListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = []
 
     def get(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
@@ -341,6 +341,13 @@ class InvitationListCreateView(APIView):
 
     def post(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
+        try:
+            is_member = OrganizationMember.objects.filter(organization=survey.organization, user=request.user).exists()
+            if not is_member:
+                return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+        except Exception:
+            return Response({"detail": "Forbidden"}, status=status.HTTP_403_FORBIDDEN)
+
         if survey.status != SurveyStatus.ACTIVE:
             return Response({"detail": "Survey is not active"}, status=status.HTTP_400_BAD_REQUEST)
         ser = InvitationCreateSerializer(data=request.data)

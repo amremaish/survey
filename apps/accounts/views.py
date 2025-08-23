@@ -1,9 +1,9 @@
 from django.shortcuts import get_object_or_404
-from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
-
+from apps.core.permissions import HasAllRoles
+from apps.core.enums import Roles
 from django.contrib.auth.models import User
 from django.db.models import Q
 from apps.core.utility import parse_int as _parse_int, page_bounds as _page_bounds
@@ -17,7 +17,8 @@ from .serializers import (
 )
 
 class OrganizationListCreateView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles_by_method = {"GET": [Roles.VIEWER.value], "POST": [Roles.EDITOR.value]}
 
     def get(self, request):
         qs = Organization.objects.all().order_by("id")
@@ -47,7 +48,8 @@ class OrganizationListCreateView(APIView):
         return Response(OrganizationSerializer(org).data, status=status.HTTP_201_CREATED)
 
 class OrganizationDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles_by_method = {"GET": [Roles.VIEWER.value], "PATCH": [Roles.EDITOR.value], "DELETE": [Roles.EDITOR.value]}
 
     def get(self, request, org_id: int):
         org = get_object_or_404(Organization, pk=org_id)
@@ -67,7 +69,8 @@ class OrganizationDetailView(APIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 class OrgMembersView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.VIEWER.value]
 
     def get(self, request, org_id: int):
         org = get_object_or_404(Organization, pk=org_id)
@@ -107,7 +110,8 @@ class OrgMembersView(APIView):
         return Response(OrgMemberSerializer(members, many=True).data, status=status.HTTP_201_CREATED)
 
 class OrgMemberDetailView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+    required_roles = [Roles.EDITOR.value]
 
     def delete(self, request, org_id: int, member_id: int):
         org = get_object_or_404(Organization, pk=org_id)
@@ -132,13 +136,17 @@ class MyOrganizationsView(APIView):
 
 class MeView(APIView):
     permission_classes = [permissions.IsAuthenticated]
-
     def get(self, request):
         u = request.user
+        try:
+            roles = list(getattr(u, 'custom_roles', None).values_list('name', flat=True)) if hasattr(u, 'custom_roles') else []
+        except Exception:
+            roles = []
         return Response({
             "id": u.id,
             "username": u.username,
             "email": u.email,
             "first_name": u.first_name,
             "last_name": u.last_name,
+            "roles": roles,
         })
