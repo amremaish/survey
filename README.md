@@ -19,6 +19,29 @@ A Django + DRF application for building surveys, collecting responses, and manag
 - Celery + Redis
 - drf-spectacular (Swagger/Redoc)
 
+## Project Structure
+```text
+survey/
+  apps/
+    accounts/          # Organizations, roles, org members, auth-related APIs
+    analytics/         # Analytics APIs powering charts on the home page
+    core/              # HTML pages, enums, permissions, utilities
+    responses/         # Survey responses and answers APIs/services
+    survey_sessions/   # Session start/autosave/complete APIs
+    surveys/           # Surveys, sections, questions, options, invitations
+    system/            # System-level models (admin/supporting)
+  media/               # Uploaded files (e.g., organization logos)
+  templates/           # Global templates (if any)
+  survey/              # Django project (settings, urls, celery app)
+  manage.py
+  requirements.txt
+  Dockerfile
+  docker-compose.yml
+  .dockerignore
+  .github/workflows/tests.yml
+  .env-example
+```
+
 ## Requirements
 - Docker and Docker Compose (recommended)
 - Or: Python 3.12, PostgreSQL, Redis (for local non-Docker runs)
