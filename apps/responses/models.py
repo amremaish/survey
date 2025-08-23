@@ -1,5 +1,6 @@
 from django.db import models
 from apps.core.models import TimeStampedModel
+from auditlog.registry import auditlog
 from apps.surveys.models import Survey, SurveyQuestion
 from apps.survey_sessions.models import SurveySession
 
@@ -43,3 +44,8 @@ class SurveyAnswer(TimeStampedModel):
 
     def __str__(self):
         return f"ans#{self.id} q#{self.question_id}"
+
+
+# Register audit logging for responses models
+auditlog.register(SurveyResponse)
+auditlog.register(SurveyAnswer)

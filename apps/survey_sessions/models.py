@@ -1,5 +1,6 @@
 from django.db import models
 from apps.core.models import TimeStampedModel
+from auditlog.registry import auditlog
 from apps.surveys.models import Survey
 from apps.accounts.models import Organization
 
@@ -18,3 +19,7 @@ class SurveySession(TimeStampedModel):
 
     def __str__(self):
         return f"session#{self.id} survey#{self.survey_id}"
+
+
+# Register for audit logging
+auditlog.register(SurveySession)

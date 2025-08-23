@@ -1,5 +1,6 @@
 from django.db import models
 from apps.core.models import TimeStampedModel
+from auditlog.registry import auditlog
 from uuid import uuid4
 import os
 from django.contrib.auth.models import User, Permission
@@ -39,3 +40,9 @@ class OrganizationMember(TimeStampedModel):
 
     def __str__(self):
         return f"org#{self.organization_id}:user#{self.user_id}"
+
+
+# Register models for automatic audit logging
+auditlog.register(Organization)
+auditlog.register(Role)
+auditlog.register(OrganizationMember)

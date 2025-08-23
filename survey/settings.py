@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
+    
+    "auditlog",
     "corsheaders",
     "apps.core",
     "apps.accounts",
@@ -72,6 +74,7 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ],
 }
+
 
 # sensible JWT defaults; tweak as you wish
 from datetime import timedelta

@@ -1,6 +1,7 @@
 from django.db import models
 from apps.core.models import TimeStampedModel
 from apps.accounts.models import Organization
+from auditlog.registry import auditlog
 
 class SurveyStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
@@ -98,3 +99,9 @@ class SurveyInvitation(TimeStampedModel):
         return f"inv:{self.email} -> {self.survey_id} ({self.status})"
 
 
+# Register audit logging for survey models
+auditlog.register(Survey)
+auditlog.register(SurveySection)
+auditlog.register(SurveyQuestion)
+auditlog.register(SurveyQuestionOption)
+auditlog.register(SurveyInvitation)
