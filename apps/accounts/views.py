@@ -7,6 +7,8 @@ from rest_framework import status, permissions
 from django.contrib.auth.models import User
 from django.db.models import Q
 from apps.core.utility import parse_int as _parse_int, page_bounds as _page_bounds
+from django.core.paginator import Paginator
+from apps.core.serializer import PaginationQuerySerializer
 from .models import Organization, OrganizationMember
 from .serializers import (
     OrganizationSerializer,
@@ -28,21 +30,15 @@ class OrganizationListCreateView(APIView):
                 | Q(phone__icontains=search)
             )
 
-        try:
-            page = max(1, int(request.query_params.get("page", 1)))
-        except ValueError:
-            page = 1
-        try:
-            page_size = max(1, min(100, int(request.query_params.get("page_size", 10))))
-        except ValueError:
-            page_size = 10
+        pager_ser = PaginationQuerySerializer(data=request.query_params)
+        pager_ser.is_valid(raise_exception=False)
+        page = pager_ser.validated_data.get("page", 1)
+        page_size = pager_ser.validated_data.get("page_size", 10)
 
-        count = qs.count()
-        start = (page - 1) * page_size
-        end = start + page_size
-        items = qs[start:end]
-        data = OrganizationSerializer(items, many=True).data
-        return Response({"count": count, "results": data})
+        paginator = Paginator(qs, page_size)
+        page_obj = paginator.get_page(page)
+        data = OrganizationSerializer(page_obj.object_list, many=True).data
+        return Response({"count": paginator.count, "results": data})
 
     def post(self, request):
         serializer = OrganizationCreateSerializer(data=request.data)

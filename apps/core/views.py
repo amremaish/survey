@@ -39,7 +39,5 @@ def surveys_manager(request):
 def org_dashboard_login(request):
     return render(request, "org_dashboard_login.html")
 
-
 def login_view(request):
-    # Pure JWT login page (frontend posts to /api/token/ and stores tokens)
     return render(request, "login.html")

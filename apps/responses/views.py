@@ -9,6 +9,8 @@ from .serializers import (
     ResponseDashboardSerializer, ResponseDetailForOrgSerializer,
 )
 from .models import SurveyResponse
+from django.core.paginator import Paginator
+from apps.core.serializer import PaginationQuerySerializer
 from .services import submit_from_session, submit_direct
 from apps.accounts.models import Organization, OrganizationMember
 
@@ -81,18 +83,13 @@ class OrgResponsesDashboardView(APIView):
         if search:
             qs = qs.filter(Q(survey__title__icontains=search) | Q(survey__code__icontains=search))
 
-        # Basic pagination
-        try:
-            page = max(1, int(request.query_params.get("page", 1)))
-        except ValueError:
-            page = 1
-        try:
-            page_size = max(1, min(100, int(request.query_params.get("page_size", 10))))
-        except ValueError:
-            page_size = 10
-        count = qs.count()
-        start = (page - 1) * page_size
-        end = start + page_size
-        items = qs[start:end]
-        data = ResponseDashboardSerializer(items, many=True).data
-        return Response({"count": count, "results": data})
+        # Standardized pagination
+        pager_ser = PaginationQuerySerializer(data=request.query_params)
+        pager_ser.is_valid(raise_exception=False)
+        page = pager_ser.validated_data.get("page", 1)
+        page_size = pager_ser.validated_data.get("page_size", 10)
+
+        paginator = Paginator(qs, page_size)
+        page_obj = paginator.get_page(page)
+        data = ResponseDashboardSerializer(page_obj.object_list, many=True).data
+        return Response({"count": paginator.count, "results": data})

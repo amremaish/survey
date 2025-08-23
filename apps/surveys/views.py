@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Iterable, List
 
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.utils.text import slugify
@@ -9,6 +10,7 @@ from django.utils.crypto import get_random_string
 from django.conf import settings
 from .tasks import create_invitations_task
 from rest_framework import status, permissions
+from django.core.paginator import Paginator
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -29,6 +31,7 @@ from apps.core.utility import (
     unique_slug_for_code as _unique_slug_for_code,
     sort_order_conflict_exists as _sort_order_conflict_exists,
 )
+from apps.core.serializer import PaginationQuerySerializer
 
 
 # ---------------------------------------------------------------------------
@@ -74,19 +77,18 @@ class SurveyListCreateView(APIView):
         if search:
             qs = qs.filter(title__icontains=search)
 
-        # Pagination
-        page = _parse_int(request.query_params.get("page", 1), 1)
-        page_size = _parse_int(request.query_params.get("page_size", 10), 10)
-        start, end = _page_bounds(page, page_size)
+        # Pagination (standardized)
+        pager_ser = PaginationQuerySerializer(data=request.query_params)
+        pager_ser.is_valid(raise_exception=False)
+        page = pager_ser.validated_data.get("page", 1)
+        page_size = pager_ser.validated_data.get("page_size", 10)
 
-        count = qs.count()
-        items = qs[start:end]
-
-        payload = {
-            "count": count,
-            "results": SurveyListSerializer(items, many=True).data,
-        }
-        return Response(payload)
+        paginator = Paginator(qs, page_size)
+        page_obj = paginator.get_page(page)
+        return Response({
+            "count": paginator.count,
+            "results": SurveyListSerializer(page_obj.object_list, many=True).data,
+        })
 
     @transaction.atomic
     def post(self, request):
@@ -313,21 +315,29 @@ class InvitationListCreateView(APIView):
 
     def get(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
+
         status_filter = (request.query_params.get('status') or '').strip()
-        qs = SurveyInvitation.objects.filter(survey=survey).order_by('-created_at')
+
+        qs = (
+            SurveyInvitation.objects
+            .filter(survey=survey)
+            .order_by('-created_at', '-id')
+        )
         if status_filter in dict(InvitationStatus.choices):
             qs = qs.filter(status=status_filter)
-        try:
-            page = max(1, int(request.query_params.get('page', 1)))
-        except ValueError:
-            page = 1
-        try:
-            page_size = max(1, min(100, int(request.query_params.get('page_size', 10))))
-        except ValueError:
-            page_size = 10
-        count = qs.count()
-        items = qs[(page-1)*page_size: (page-1)*page_size + page_size]
-        return Response({ 'count': count, 'results': InvitationReadSerializer(items, many=True).data })
+
+        pager_ser = PaginationQuerySerializer(data=request.query_params)
+        pager_ser.is_valid(raise_exception=False)
+        page = pager_ser.validated_data.get('page', 1)
+        page_size = pager_ser.validated_data.get('page_size', 10)
+
+        paginator = Paginator(qs, page_size)
+        page_obj = paginator.get_page(page)
+
+        return Response({
+            'count': paginator.count,
+            'results': InvitationReadSerializer(page_obj.object_list, many=True).data,
+        })
 
     def post(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
