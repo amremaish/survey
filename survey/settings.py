@@ -149,11 +149,11 @@ if 'test' in sys.argv:
 # Caches - default to local memory; can be overridden to Redis via env
 CACHES = {
     'default': {
-        'BACKEND': os.getenv('CACHE_BACKEND', 'django.core.cache.backends.locmem.LocMemCache'),
-        'LOCATION': os.getenv('CACHE_LOCATION', 'survey-cache'),
-        **({'OPTIONS': {
+        'BACKEND': os.getenv('CACHE_BACKEND', 'django_redis.cache.RedisCache'),
+        'LOCATION': os.getenv('CACHE_LOCATION', 'redis://redis:6379/1'),
+        'OPTIONS': {
             'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-        }} if os.getenv('CACHE_BACKEND') == 'django_redis.cache.RedisCache' else {})
+        }
     }
 }
 
@@ -242,9 +242,9 @@ EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1') == '1'
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'no-reply@example.com')
 
 # Celery (broker URL via env, e.g., redis://127.0.0.1:6379/0)
-CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://redis:6379/0')
 CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
-# Enable eager (synchronous) task execution in development if desired
+# Disable eager by default when broker is configured
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_EAGER', '0') == '1'
 CELERY_TASK_EAGER_PROPAGATES = True
 
