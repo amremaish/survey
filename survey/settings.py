@@ -54,16 +54,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
-    
     "auditlog",
     "corsheaders",
     "apps.core",
+    "apps.analytics",
     "apps.accounts",
     "apps.surveys",
     "apps.survey_sessions",
     "apps.responses",
-    "apps.system",
-
 ]
 
 REST_FRAMEWORK = {

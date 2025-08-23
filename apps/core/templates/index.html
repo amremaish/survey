@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Home</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    // Require builder token on homepage
+    (function(){
+      try { if(!localStorage.getItem('access')) window.location.href = '/login?next=/'; } catch(e) {}
+    })();
+  </script>
+  <style>
+    .card { border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.06) }
+  </style>
+  <script>
+    const API_BASE = 'http://127.0.0.1:8000';
+    async function fetchOverall(windowKind, days){
+      const token = localStorage.getItem('access');
+      const url = `${API_BASE}/api/v1/analytics/overall-submissions/?window=${encodeURIComponent(windowKind)}&days=${encodeURIComponent(days)}`;
+      const resp = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token }});
+      if(!resp.ok){ throw new Error('Failed to load analytics'); }
+      return await resp.json();
+    }
+    async function fetchByOrg(){
+      const token = localStorage.getItem('access');
+      const resp = await fetch(`${API_BASE}/api/v1/analytics/submissions-by-organization/`, { headers: { 'Authorization': 'Bearer ' + token }});
+      if(!resp.ok){ throw new Error('Failed to load org analytics'); }
+      return await resp.json();
+    }
+    async function fetchInvStatus(){
+      const token = localStorage.getItem('access');
+      const resp = await fetch(`${API_BASE}/api/v1/analytics/invitation-status/`, { headers: { 'Authorization': 'Bearer ' + token }});
+      if(!resp.ok){ throw new Error('Failed to load invitation analytics'); }
+      return await resp.json();
+    }
+    async function fetchResponsesBySurveyStatus(){
+      const token = localStorage.getItem('access');
+      const resp = await fetch(`${API_BASE}/api/v1/analytics/responses-by-survey-status/`, { headers: { 'Authorization': 'Bearer ' + token }});
+      if(!resp.ok){ throw new Error('Failed to load survey status analytics'); }
+      return await resp.json();
+    }
+    let overallChart;
+    let orgChart;
+    let invChart;
+    let statusChart;
+    async function renderOverall(){
+      const windowKind = document.getElementById('winSel').value;
+      const days = parseInt(document.getElementById('daysSel').value||'30',10);
+      const data = await fetchOverall(windowKind, days);
+      const ctx = document.getElementById('overallChart').getContext('2d');
+      const cfg = {
+        type: 'line',
+        data: {
+          labels: data.labels,
+          datasets: [{
+            label: 'Submissions',
+            data: data.data,
+            fill: true,
+            tension: .3,
+            borderColor: '#0d6efd',
+            backgroundColor: 'rgba(13,110,253,.15)'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: false } },
+          scales: { x: { ticks: { maxRotation: 0, autoSkip: true } }, y: { beginAtZero: true, precision: 0 } }
+        }
+      };
+      if(overallChart){ overallChart.destroy(); }
+      overallChart = new Chart(ctx, cfg);
+    }
+    async function renderByOrg(){
+      const data = await fetchByOrg();
+      const ctx = document.getElementById('orgSubmissionsChart').getContext('2d');
+      if(orgChart){ orgChart.destroy(); }
+      orgChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: data.labels, datasets: [{ label: 'Responses', data: data.data, backgroundColor: '#198754' }]},
+        options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, precision: 0 }}}
+      });
+    }
+    async function renderInvStatus(){
+      const data = await fetchInvStatus();
+      const ctx = document.getElementById('invitationStatusChart').getContext('2d');
+      if(invChart){ invChart.destroy(); }
+      invChart = new Chart(ctx, {
+        type: 'doughnut',
+        data: { labels: data.labels, datasets: [{ data: data.data, backgroundColor: ['#ffc107','#0d6efd','#6c757d'] }]},
+        options: { plugins: { legend: { position: 'bottom' }}}
+      });
+    }
+    async function renderResponsesByStatus(){
+      const data = await fetchResponsesBySurveyStatus();
+      const ctx = document.getElementById('surveyStatusChart').getContext('2d');
+      if(statusChart){ statusChart.destroy(); }
+      statusChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: data.labels, datasets: [{ label: 'Responses', data: data.data, backgroundColor: ['#6c757d','#198754','#dc3545'] }]},
+        options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, precision: 0 }}}
+      });
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+      document.getElementById('winSel').addEventListener('change', renderOverall);
+      document.getElementById('daysSel').addEventListener('change', renderOverall);
+      renderOverall().catch(err=>{ console.error(err); });
+      renderByOrg().catch(err=>{ console.error(err); });
+      renderInvStatus().catch(err=>{ console.error(err); });
+      renderResponsesByStatus().catch(err=>{ console.error(err); });
+    });
+  </script>
+</head>
+<body>
+  {% include 'partials/navbar.html' %}
+  <main class="container py-4 mt-5">
+    <div class="row g-3">
+      <div class="col-12 col-md-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <h6 class="mb-0">Overall submissions</h6>
+              <div class="ms-auto d-flex align-items-center gap-2">
+                <select id="winSel" class="form-select form-select-sm" style="width:140px">
+                  <option value="day">Per day</option>
+                  <option value="week">Per week</option>
+                </select>
+                <select id="daysSel" class="form-select form-select-sm" style="width:120px">
+                  <option value="7">7 days</option>
+                  <option value="14">14 days</option>
+                  <option value="30" selected>30 days</option>
+                  <option value="90">90 days</option>
+                </select>
+              </div>
+            </div>
+            <canvas id="overallChart" height="80"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <h6 class="mb-0">Submissions by organization</h6>
+            </div>
+            <canvas id="orgSubmissionsChart" height="80"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <h6 class="mb-0">Invitation status</h6>
+            </div>
+            <canvas id="invitationStatusChart" height="80"></canvas>
+          </div>
+        </div>
+      </div>
+      <div class="col-12 col-md-6">
+        <div class="card h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+              <h6 class="mb-0">Responses by survey status</h6>
+            </div>
+            <canvas id="surveyStatusChart" height="80"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
+
+

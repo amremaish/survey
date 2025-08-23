@@ -5,6 +5,9 @@ from apps.surveys.models import Survey, SurveyInvitation, InvitationStatus
 def survey_builder(request):
     return render(request, "builder.html")
 
+def index(request):
+    return render(request, "index.html")
+
  
 
 def public_runner(request, survey_code: str):
