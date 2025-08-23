@@ -127,6 +127,52 @@ docker compose up --scale worker=2 -d
 
 Use the Authorize button in Swagger UI to enter a JWT access token.
 
+## API (v1)
+
+Base prefix: `api/v1/`
+
+### Accounts
+- `GET /api/v1/orgs/` — List organizations (Viewer)
+- `POST /api/v1/orgs/` — Create organization (Editor)
+- `GET /api/v1/orgs/<org_id>/` — Retrieve organization (Viewer)
+- `PATCH /api/v1/orgs/<org_id>/` — Update organization (Editor)
+- `DELETE /api/v1/orgs/<org_id>/` — Delete organization (Editor)
+- `GET /api/v1/orgs/<org_id>/members/` — List organization members (Viewer)
+- `POST /api/v1/orgs/<org_id>/members/` — Add organization member (Editor)
+- `DELETE /api/v1/orgs/<org_id>/members/<member_id>/` — Remove organization member (Editor)
+- `GET /api/v1/my-orgs/` — Organizations for the authenticated user (Viewer)
+- `GET /api/v1/me/` — Current user info and assigned roles (auth required)
+
+### Surveys
+- `GET /api/v1/surveys/` — List surveys with pagination (Viewer)
+- `POST /api/v1/surveys/` — Create survey (Editor)
+- `GET /api/v1/surveys/<survey_id>/detail/` — Survey detail (Viewer)
+- `GET /api/v1/surveys/code/<survey_code>/detail/` — Survey detail by code, Redis-cached 1 day (Viewer)
+- `POST /api/v1/surveys/<survey_id>/sections/` — Create section (Editor)
+- `POST /api/v1/surveys/sections/<section_id>/questions/` — Create question (Editor)
+- `PATCH /api/v1/surveys/questions/<question_id>/` — Update question (Editor; invalidates cache)
+- `GET /api/v1/surveys/questions/<question_id>/detail/` — Question detail (Viewer)
+- `POST /api/v1/surveys/questions/<question_id>/options/` — Create option (Editor)
+- `GET /api/v1/surveys/<survey_id>/invitations/?status=&page=&page_size=` — List invitations with filter + pagination (Viewer)
+- `POST /api/v1/surveys/<survey_id>/invitations/` — Queue invitations email task (Editor; survey must be ACTIVE)
+
+### Survey Sessions
+- `POST /api/v1/sessions/sessions/start/` — Start a survey session
+- `GET /api/v1/sessions/sessions/<session_id>/` — Session detail
+- `POST /api/v1/sessions/sessions/<session_id>/autosave/` — Autosave responses for a session
+- `POST /api/v1/sessions/sessions/<session_id>/complete/` — Complete session
+
+### Responses
+- `POST /api/v1/responses/submit/` — Submit a survey response; validates invitation token, expiry, one-time submission
+- `GET /api/v1/responses/<response_id>/` — Response detail (Viewer, org-scoped)
+- `GET /api/v1/responses/org/<org_id>/dashboard/?page=&page_size=` — Org responses dashboard (Viewer, paginated)
+
+### Analytics
+- `GET /api/v1/analytics/overall-submissions/` — Time series of submissions
+- `GET /api/v1/analytics/submissions-by-organization/` — Totals by organization
+- `GET /api/v1/analytics/invitation-status/` — Pending/Submited/Expired distribution
+- `GET /api/v1/analytics/responses-by-survey-status/` — Responses grouped by survey status
+
 ## Roles & Permissions
 
 ### Roles (RBAC)
