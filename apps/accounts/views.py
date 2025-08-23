@@ -49,7 +49,7 @@ class OrganizationListCreateView(APIView):
 
 class OrganizationDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
-    required_roles_by_method = {"GET": [Roles.VIEWER.value], "PATCH": [Roles.EDITOR.value], "DELETE": [Roles.EDITOR.value]}
+    required_roles_by_method = {"PATCH": [Roles.EDITOR.value], "DELETE": [Roles.EDITOR.value]}
 
     def get(self, request, org_id: int):
         org = get_object_or_404(Organization, pk=org_id)

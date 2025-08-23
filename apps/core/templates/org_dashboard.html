@@ -137,9 +137,9 @@ function notify(title, body){
     new bootstrap.Toast(document.getElementById('toast')).show();
   } catch(e) { console.log(title+': '+body); }
 }
-function getToken(){ return localStorage.getItem('access'); }
-function setTokens(a,r){ localStorage.setItem('access',a); localStorage.setItem('refresh',r||''); $('#logoutBtn').removeClass('d-none'); $('#loginBtnTop').addClass('d-none'); }
-function clearTokens(){ localStorage.removeItem('access'); localStorage.removeItem('refresh'); $('#logoutBtn').addClass('d-none'); $('#loginBtnTop').removeClass('d-none'); }
+function getToken(){ return localStorage.getItem('org_access'); }
+function setTokens(a,r){ localStorage.setItem('org_access',a); localStorage.setItem('org_refresh',r||''); $('#logoutBtn').removeClass('d-none'); $('#loginBtnTop').addClass('d-none'); }
+function clearTokens(){ localStorage.removeItem('org_access'); localStorage.removeItem('org_refresh'); $('#logoutBtn').addClass('d-none'); $('#loginBtnTop').removeClass('d-none'); }
 function ajaxAuth(opts){ const t=getToken(); opts.headers=opts.headers||{}; if(t) opts.headers['Authorization']='Bearer '+t; return $.ajax(opts); }
 
 let PAGE = 1; const PAGE_SIZE = 12;

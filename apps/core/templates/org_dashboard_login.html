@@ -57,7 +57,7 @@ $(function(){
       contentType: 'application/json',
       data: JSON.stringify({ username: email, password: password }),
     }).done(function(tokens){
-      try { localStorage.setItem('access_token', tokens.access); localStorage.setItem('refresh_token', tokens.refresh); } catch(e) {}
+      try { localStorage.setItem('org_access', tokens.access); localStorage.setItem('org_refresh', tokens.refresh); } catch(e) {}
       // Fetch organizations of the user and redirect to the first one
       $.ajax({
         url: API_BASE + '/api/v1/my-orgs/',

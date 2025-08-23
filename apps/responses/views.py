@@ -65,8 +65,7 @@ class ResponseDetailView(APIView):
 
 
 class OrgResponsesDashboardView(APIView):
-    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
-    required_roles = [Roles.VIEWER.value]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, org_id: int):
         # Ensure requesting user is a member of the organization

@@ -8,6 +8,7 @@ from apps.core.permissions import HasAllRoles
 from django.core.paginator import Paginator
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.core.cache import cache
 from apps.accounts.models import OrganizationMember
 from .models import (
     Survey, SurveySection, SurveyQuestion, SurveyQuestionOption, SurveyStatus,
@@ -43,8 +44,8 @@ class SurveyListCreateView(APIView):
           Organization can be provided as serializer field or request.data["organization_id"].
           Auto-generates a unique `code` from the title.
     """
-    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
-    required_roles_by_method = {"GET": [Roles.VIEWER.value], "POST": [Roles.EDITOR.value]}
+    permission_classes = [permissions.IsAuthenticated]
+    required_roles_by_method = {"POST": [Roles.EDITOR.value]}
 
     def get(self, request):
         qs = (
@@ -160,11 +161,18 @@ class SurveyDetailByCodeView(APIView):
     permission_classes = []  # AllowAny
 
     def get(self, request, survey_code: str):
+        cache_key = f"survey_detail:{survey_code}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         survey = get_object_or_404(
             Survey.objects.prefetch_related("sections__questions__options"),
             code=survey_code,
         )
-        return Response(SurveyDetailSerializer(survey).data)
+        data = SurveyDetailSerializer(survey).data
+        cache.set(cache_key, data, timeout=86400) # 24 hours
+        return Response(data)
 
 
 class SectionCreateView(APIView):
@@ -291,6 +299,11 @@ class QuestionUpdateView(APIView):
                 {"detail": "Sort order must be unique within the section.", "field": "sort_order"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        try:
+            survey_code = q.section.survey.code
+            cache.delete(f"survey_detail:{survey_code}")
+        except Exception:
+            pass
         return Response({"id": q.id})
 
 
