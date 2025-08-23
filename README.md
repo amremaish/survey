@@ -128,9 +128,55 @@ docker compose up --scale worker=2 -d
 Use the Authorize button in Swagger UI to enter a JWT access token.
 
 ## Roles & Permissions
-- Roles are defined in `apps.core.enums.Roles`: `Viewer`, `Editor`
-- Custom permissions via `HasAllRoles` and `HasAllPermissions`
-- On startup, roles are ensured and assigned to the bootstrap superuser in `apps.core.apps.CoreConfig.ready()`
+
+### Roles (RBAC)
+Defined in `apps/core/enums.py`:
+```python
+from enum import Enum
+
+class Roles(str, Enum):
+    VIEWER = "Viewer"
+    EDITOR = "Editor"
+
+    def __str__(self) -> str:
+        return self.value
+```
+
+- **Viewer**: Read-only access. Typically required for `GET` on index, builder, organizations, surveys, responses.
+- **Editor**: Write access. Required for write methods (`POST`, `PATCH`, `PUT`, `DELETE`) across the same areas.
+
+On startup, roles are ensured and assigned to the bootstrap superuser in `apps.core.apps.CoreConfig.ready()`.
+
+### Permission classes
+- **HasAllRoles**: Denies access unless the user has all roles listed in `view.required_roles` or method-specific `view.required_roles_by_method`.
+  - Superusers do not bypass these checks.
+  - Example:
+    ```python
+    from rest_framework import permissions
+    from apps.core.permissions import HasAllRoles
+    from apps.core.enums import Roles
+
+    class SurveyListCreateView(APIView):
+        permission_classes = [permissions.IsAuthenticated, HasAllRoles]
+        required_roles_by_method = {
+            "GET": [Roles.VIEWER],
+            "POST": [Roles.EDITOR],
+        }
+    ```
+
+- **HasAllPermissions**: Denies access unless the user has all Django permissions listed in `view.required_permissions` (e.g., `"accounts.delete_organizationmember"`).
+  - Evaluates the user's effective permissions; superusers do not implicitly bypass.
+  - Example:
+    ```python
+    from rest_framework import permissions
+    from apps.core.permissions import HasAllPermissions
+
+    class MeView(APIView):
+        permission_classes = [permissions.IsAuthenticated, HasAllPermissions]
+        required_permissions = ["accounts.delete_organizationmember"]
+    ```
+
+- You can combine both classes on a view to require both roles and permissions.
 
 ## Auditing
 - Auditing is enabled via `django-auditlog` to track creates, updates, and deletes.
