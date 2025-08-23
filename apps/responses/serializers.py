@@ -97,7 +97,7 @@ class SurveyAnswerDetailSerializer(serializers.ModelSerializer):
 
     def get_question_prompt(self, obj: SurveyAnswer):
         try:
-            return obj.question.prompt
+            return getattr(obj.question, 'input_title', None) or obj.question.prompt
         except Exception:
             return None
 

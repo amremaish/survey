@@ -5,8 +5,7 @@ from apps.surveys.models import Survey, SurveyInvitation, InvitationStatus
 def survey_builder(request):
     return render(request, "builder.html")
 
-def survey_runner(request, survey_code: str | None = None):
-    return render(request, "runner.html", {"survey_code": survey_code or ""})
+ 
 
 def public_runner(request, survey_code: str):
     token = request.GET.get("token")
@@ -35,3 +34,12 @@ def org_dashboard(request, org_id: int):
 
 def surveys_manager(request):
     return render(request, "surveys.html")
+
+
+def org_dashboard_login(request):
+    return render(request, "org_dashboard_login.html")
+
+
+def login_view(request):
+    # Pure JWT login page (frontend posts to /api/token/ and stores tokens)
+    return render(request, "login.html")

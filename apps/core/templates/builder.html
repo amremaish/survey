@@ -129,8 +129,8 @@
                 <input type="text" class="form-control" id="propCode" disabled>
               </div>
               <div class="mb-2">
-                <label class="form-label">Prompt</label>
-                <textarea class="form-control" id="propPrompt" rows="2" required></textarea>
+                <label class="form-label">Input Title</label>
+                <input class="form-control" id="propPrompt" required>
               </div>
               <div class="row g-2 mb-2">
                 <div class="col">
@@ -193,32 +193,7 @@
     </div>
   </main>
 
-  <!-- Login Modal -->
-  <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title">Login</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <div class="mb-3">
-            <label class="form-label">Username</label>
-            <input type="text" class="form-control" id="loginUsername" placeholder="admin" />
-          </div>
-          <div class="mb-3">
-            <label class="form-label">Password</label>
-            <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" />
-          </div>
-          <div class="alert alert-warning small">Your API must expose <code>/api/token/</code> for JWT. CORS must allow this origin.</div>
-        </div>
-        <div class="modal-footer">
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          <button type="button" id="loginBtn" class="btn btn-primary">Login</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  
 
   <!-- Toasts -->
   <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
@@ -234,7 +209,7 @@
 
 <script>
 // ===================== CONFIG =====================
-const API_BASE = "http://localhost:8000"; // change to your backend
+const API_BASE = "http://127.0.0.1:8000"; // unified with other pages
 const ENDPOINTS = {
   token: API_BASE + "/api/token/",
   surveys: API_BASE + "/api/v1/surveys/",
@@ -254,15 +229,7 @@ function notify(title, body) {
   t.show();
 }
 
-function setAuthUI(loggedIn) {
-  if (loggedIn) {
-    $("#authStatus").removeClass('text-warning').addClass('text-success').text('Authenticated');
-    $("#logoutBtn").removeClass('d-none');
-  } else {
-    $("#authStatus").removeClass('text-success').addClass('text-warning').text('Not authenticated');
-    $("#logoutBtn").addClass('d-none');
-  }
-}
+function setAuthUI(loggedIn) { /* JWT-only: navbar handles welcome via API */ }
 
 function getAccessToken() { return localStorage.getItem('access'); }
 function setTokens(access, refresh) { localStorage.setItem('access', access); localStorage.setItem('refresh', refresh || ''); setAuthUI(true); }
@@ -309,11 +276,11 @@ function addSectionCard(section) {
 
 function renderQuestionCard(q) {
   const card = $(`
-    <div class="card mb-2 question-card pointer" data-type="${q.type}" data-qid="${q.__localId || q.id}" data-order="${q.sort_order||1}" data-required="${!!q.required}" data-sensitive="${!!q.sensitive}" data-constraints='${JSON.stringify(q.constraints||{})}' data-prompt="${(q.prompt||'').replace(/"/g,'&quot;')}">
+    <div class="card mb-2 question-card pointer" data-type="${q.type}" data-qid="${q.__localId || q.id}" data-order="${q.sort_order||1}" data-required="${!!q.required}" data-sensitive="${!!q.sensitive}" data-constraints='${JSON.stringify(q.constraints||{})}' data-prompt="${((q.input_title||q.prompt||'').replace(/\"/g,'&quot;'))}">
       <div class="card-body py-2">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <strong>${q.prompt || '(untitled question)'} </strong>
+            <strong>${(q.input_title||q.prompt) || '(untitled question)'} </strong>
             <span class="badge badge-type" data-type="${q.type}">${q.type}</span>
             <span class="text-muted small">code:</span>
             <code>${q.code || '—'}</code>
@@ -342,9 +309,26 @@ function openQuestionProperties(sectionId, q) {
   refreshSectionSelect();
   if (sectionId) $('#propSection').val(sectionId);
   $('#propCode').val(q.code || '');
-  $('#propPrompt').val(q.prompt || '');
+  $('#propPrompt').val((q.input_title||q.prompt) || '');
   $('#propType').val(q.type || 'text');
-  $('#propOrder').val(q.sort_order || 1);
+  // Auto-set Sort Order for new (temp) questions based on current section items
+  (function(){
+    var current = parseInt(q.sort_order||0, 10) || 0;
+    var isNew = !q.id || String(q.id).startsWith('temp');
+    var nextOrder = current;
+    try {
+      var secId = sectionId || $('#propSection').val();
+      if (isNew && secId) {
+        var maxOrder = 0;
+        $(`[data-section-id='${secId}'] .question-card`).each(function(){
+          var ord = parseInt($(this).attr('data-order')||'0',10) || 0;
+          if (ord > maxOrder) maxOrder = ord;
+        });
+        nextOrder = (maxOrder || 0) + 1;
+      }
+    } catch(e) { nextOrder = current || 1; }
+    $('#propOrder').val(nextOrder || 1);
+  })();
   $('#propRequired').prop('checked', !!q.required);
   $('#propSensitive').prop('checked', !!q.sensitive);
   // load existing constraints if present; otherwise keep empty editor
@@ -415,7 +399,7 @@ function wireDroppable($el){
     const sectionId = $(this).data('section-id');
     if (!CURRENT_SURVEY_ID) { return notify('Survey', 'Create or select a survey first'); }
     if (String(sectionId).startsWith('temp')) { return notify('Section', 'Persist the section first'); }
-    const stub = { __localId: 'temp-q-' + (TEMP_ID_SEQ++), type: DRAG_TYPE || 'text', code: '', prompt: '', sort_order: 1, required: false, sensitive: false, constraints: {}, options: [] };
+    const stub = { __localId: 'temp-q-' + (TEMP_ID_SEQ++), type: DRAG_TYPE || 'text', code: '', input_title: '', sort_order: 1, required: false, sensitive: false, constraints: {}, options: [] };
     openQuestionProperties(sectionId, stub);
   });
 }
@@ -424,33 +408,16 @@ function wireDroppable($el){
 $('#paletteList .item').on('click', function(){
   const t = $(this).data('qtype');
   if (!CURRENT_SELECTED_SECTION_ID) return notify('Section', 'Select a section first');
-  const stub = { __localId: 'temp-q-' + (TEMP_ID_SEQ++), type: t, code: '', prompt: '', sort_order: 1, required: false, sensitive: false, constraints: {}, options: [] };
+  const stub = { __localId: 'temp-q-' + (TEMP_ID_SEQ++), type: t, code: '', input_title: '', sort_order: 1, required: false, sensitive: false, constraints: {}, options: [] };
   openQuestionProperties(CURRENT_SELECTED_SECTION_ID, stub);
 });
 
 // ===================== AUTH =====================
-$("#loginBtn").on('click', function(){
-  const username = $('#loginUsername').val().trim();
-  const password = $('#loginPassword').val();
-  $.ajax({
-    url: ENDPOINTS.token,
-    method: 'POST',
-    contentType: 'application/json',
-    data: JSON.stringify({ username, password })
-  }).done((data)=>{
-    setTokens(data.access, data.refresh);
-    notify('Login', 'Authenticated successfully');
-    bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
-    loadSurveyList();
-  }).fail((xhr)=>{ notify('Login failed', xhr.responseText || 'Invalid credentials'); });
-});
-
-$('#logoutBtn').on('click', function(){ clearTokens(); notify('Logout', 'Tokens cleared'); $('#sectionsList').empty(); $('#surveyPicker').empty().append('<option value="">— select —</option>'); CURRENT_SURVEY_ID = null; $('#currentSurveyId').text('—'); });
-
-// On load
-setAuthUI(!!getAccessToken());
+// Login modal removed; page is protected by Django session auth.
 
 // ===================== SURVEY LIST & DETAIL =====================
+// Enforce JWT presence
+$(function(){ if (!getAccessToken()) { window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname); } });
 function loadSurveyList(orgId) {
   const params = orgId ? (`?organization_id=${encodeURIComponent(orgId)}`) : '';
   ajaxWithAuth({ url: ENDPOINTS.surveys + params, method: 'GET' })
@@ -537,13 +504,13 @@ $(document).on('click', '.question-card', function(){
   try { constraints = JSON.parse($(this).attr('data-constraints')||'{}'); } catch(e) {}
   // Fetch fresh details including options for the selected question
   if (String(qid).startsWith('temp')) {
-    const stub = { id: qid, type, code, prompt: promptTxt, sort_order: sortOrder, required, sensitive, constraints, options: [] };
+    const stub = { id: qid, type, code, input_title: promptTxt, sort_order: sortOrder, required, sensitive, constraints, options: [] };
     openQuestionProperties(sectionId, stub);
   } else {
     // Use lightweight question detail endpoint
     ajaxWithAuth({ url: API_BASE + "/api/v1/surveys/questions/" + qid + "/detail/", method:'GET' }).done((found)=>{
       const opts = (found && found.options) ? found.options.map(o=>({ label:o.label, value:o.value, sort_order:o.sort_order })) : [];
-      const stub = { id: qid, type: found.type || type, code: found.code || code, prompt: found.prompt || promptTxt, sort_order: found.sort_order || sortOrder, required: !!found.required, sensitive: !!found.sensitive, constraints: found.constraints || {}, options: opts };
+      const stub = { id: qid, type: found.type || type, code: found.code || code, input_title: (found.input_title||found.prompt||promptTxt), sort_order: found.sort_order || sortOrder, required: !!found.required, sensitive: !!found.sensitive, constraints: found.constraints || {}, options: opts };
       openQuestionProperties(sectionId, stub);
     });
   }
@@ -561,7 +528,7 @@ $('#saveQuestionBtn').on('click', function(){
   const sectionId = parseInt($('#propSection').val(),10);
   const payload = {
     // code is generated by backend
-    prompt: $('#propPrompt').val().trim(),
+    input_title: $('#propPrompt').val().trim(),
     type: $('#propType').val(),
     required: $('#propRequired').is(':checked'),
     sensitive: $('#propSensitive').is(':checked'),
@@ -569,7 +536,7 @@ $('#saveQuestionBtn').on('click', function(){
     sort_order: parseInt($('#propOrder').val()||'1',10),
     metadata: {}
   };
-  if (!payload.prompt) return notify('Validation', 'Prompt is required');
+  if (!payload.input_title) return notify('Validation', 'Input Title is required');
 
   const isUpdate = !!(CURRENT_EDITING.id && String(CURRENT_EDITING.id).indexOf('temp-') !== 0);
   if (isUpdate) {

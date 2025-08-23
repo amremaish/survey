@@ -12,16 +12,10 @@
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto mb-2 mb-lg-0">
         <li class="nav-item"><a class="nav-link" href="/">Builder</a></li>
-        <li class="nav-item"><a class="nav-link" href="/run/">Runner</a></li>
         <li class="nav-item"><a class="nav-link" href="/orgs/">Organizations</a></li>
         <li class="nav-item"><a class="nav-link" href="/surveys/">Surveys</a></li>
       </ul>
-
-      <div class="d-flex align-items-center gap-2">
-        <span id="authStatus" class="navbar-text text-warning small me-1">Not authenticated</span>
-        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Login</button>
-        <button id="logoutBtn" class="btn btn-outline-light btn-sm d-none">Logout</button>
-      </div>
+      <div class="ms-auto navbar-text text-light small" id="welcomeUser" style="opacity:.9"></div>
     </div>
   </div>
 </nav>
@@ -38,6 +32,17 @@
       if (href === '/' && path === '/') { a.classList.add('active'); }
     });
   } catch (e) {}
+})();
+
+// Load username via JWT
+(function(){
+  try {
+    var token = localStorage.getItem('access');
+    if (!token) return;
+    fetch('http://127.0.0.1:8000/api/v1/me/', { headers: { 'Authorization': 'Bearer ' + token }})
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){ if (data && data.username) { var el=document.getElementById('welcomeUser'); if (el) el.textContent = 'Welcome, ' + data.username; } });
+  } catch(e) {}
 })();
 </script>
 

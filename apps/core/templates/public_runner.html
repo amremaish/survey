@@ -48,7 +48,6 @@
       <div id="surveyEmpty" class="text-muted">Loading…</div>
       <form id="surveyForm" class="d-none"></form>
       <div class="d-none mt-3" id="navButtons">
-        <button class="btn btn-outline-primary" id="saveBtn">Save Progress</button>
         <button class="btn btn-success" id="submitBtn">Submit</button>
       </div>
     </div>
@@ -161,7 +160,7 @@ function renderSurvey(data){
 
 function renderQuestion(q){
   const wrap = $(`<div class="mb-3" data-qcode="${q.code}" data-qtype="${q.type}" data-constraints='${JSON.stringify(q.constraints||{})}' data-required='${q.required?"1":"0"}'></div>`);
-  wrap.append(`<label class="form-label">${q.prompt}${q.required? ' <span class="text-danger">*</span>':''}</label>`);
+  wrap.append(`<label class="form-label">${(q.input_title||q.prompt)}${q.required? ' <span class="text-danger">*</span>':''}</label>`);
   if(q.type==='text'){ wrap.append(`<input type="text" class="form-control" />`); }
   else if(q.type==='number'){ wrap.append(`<input type="number" class="form-control" />`); }
   else if(q.type==='date'){ wrap.append(`<input type="date" class="form-control" />`); }
@@ -286,13 +285,30 @@ function applyDraftToForm(draft){
 $(function(){
   const existing = loadPersistedSession();
   const alreadySubmitted = loadSubmittedFlag();
-  // Handle invite status flags preemptively
-  if (INVITE_STATUS === 'invalid'){ setStatusUI('invalid'); return; }
-  if (INVITE_STATUS === 'submitted'){ setStatusUI('submitted'); return; }
-  if (INVITE_STATUS === 'expired'){ setStatusUI('expired'); return; }
-
   $.ajax({ url: ENDPOINTS.surveyDetailByCode(SURVEY_CODE), method:'GET' }).done((data)=>{
-    SURVEY=data; renderSurvey(data);
+    SURVEY=data;
+    // If invite status is preset, mirror org info then show status
+    if (INVITE_STATUS === 'invalid' || INVITE_STATUS === 'submitted' || INVITE_STATUS === 'expired'){
+      $('#swTitle').text(data.title||'');
+      $('#swFooterOrgName').text((data.organization && data.organization.name)||'');
+      if (data.organization && (data.organization.logo||'').length){ $('#swFooterLogo').attr('src', data.organization.logo).show(); }
+      setStatusUI(INVITE_STATUS);
+      return;
+    }
+    if ((data.status||'').toLowerCase() !== 'active'){
+      $('#swTitle').text(data.title||'');
+      $('#swFooterOrgName').text((data.organization && data.organization.name)||'');
+      if (data.organization && (data.organization.logo||'').length){ $('#swFooterLogo').attr('src', data.organization.logo).show(); }
+      document.getElementById('statusTitle').textContent = 'Survey closed';
+      document.getElementById('statusDesc').textContent = 'This survey is not accepting responses.';
+      document.getElementById('statusIcon').className = 'icon d-inline-flex mb-2 danger';
+      document.getElementById('statusIcon').innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16"><path d="M8.982 1.566a1.13 1.13 0 0 0-1.964 0L.165 13.233c-.457.778.091 1.767.982 1.767h13.706c.89 0 1.438-.99.982-1.767L8.982 1.566zM8 5c.535 0 .954.462.9.995l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 5.995A.905.905 0 0 1 8 5zm.002 6a1 1 0 1 1-2.002 0 1 1 0 0 1 2.002 0z"/></svg>';
+      $('#surveyPanel').addClass('d-none');
+      $('#companyPanel').addClass('d-none');
+      $('#submittedWrap').removeClass('d-none');
+      return;
+    }
+    renderSurvey(data);
     if(alreadySubmitted){
       $('#surveyPanel').addClass('d-none');
       $('#companyPanel').addClass('d-none');
@@ -308,7 +324,7 @@ $(function(){
       SESSION_ID=existing; $('#sessionId').text(existing);
       // fetch draft and apply
       $.ajax({ url: ENDPOINTS.autosave(existing).replace('/autosave/','/'), method:'GET' })
-        .done((sess)=>{ applyDraftToForm(sess.partial_payload||{}); });
+        .done((sess)=>{ applyDraftToForm(sess.partial_payload||{}); evaluateAll(); });
     } else {
       // token flow via ?token=... (invitation)
       const params = new URLSearchParams(window.location.search);
@@ -321,7 +337,7 @@ $(function(){
     }
   });
 
-  $('#saveBtn').on('click', function(){ if(!SESSION_ID) return; const payload={ partial_payload: serialize() }; $.ajax({ url: ENDPOINTS.autosave(SESSION_ID), method:'PATCH', contentType:'application/json', data: JSON.stringify(payload) }); });
+  
   $('#submitBtn').on('click', function(){ const draft=serialize();
     // Prefer session-based submit to ensure invitation linkage
     const payload = SESSION_ID ? { session_id: SESSION_ID, answers: draft } : { survey_id: SURVEY.id, answers: draft };

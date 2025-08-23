@@ -191,9 +191,9 @@ $(document).on('click', '.delete', function(){ const id=$(this).closest('tr').da
 
 $('#saveSurveyBtn').on('click', function(){ const payload={ title: $('#modalTitle').val().trim(), description: ($('#modalDescription').val()||'').trim(), status: $('#modalStatus').val(), organization_id: (parseInt((SURVEYS_ORG_SELECT && SURVEYS_ORG_SELECT.getValue())||'0',10)||null) }; if(!payload.title) return notify('Validation','Title required'); if(!payload.organization_id) return notify('Validation','Organization is required'); if(CURRENT){ ajaxAuth({ url: ENDPOINTS.surveyDetail(CURRENT.id), method:'PATCH', contentType:'application/json', data: JSON.stringify(payload) }).done(()=>{ notify('Survey','Updated'); bootstrap.Modal.getInstance(document.getElementById('surveyModal')).hide(); loadSurveys(); }); } else { ajaxAuth({ url: ENDPOINTS.surveys, method:'POST', contentType:'application/json', data: JSON.stringify(payload) }).done(()=>{ notify('Survey','Created'); bootstrap.Modal.getInstance(document.getElementById('surveyModal')).hide(); loadSurveys(); }); } });
 
-// init
-initOrgSelects();
-if(getToken()) loadSurveys();
+// init (enforce JWT)
+if(!getToken()) { window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname); }
+else { initOrgSelects(); loadSurveys(); }
 </script>
 
 </body>

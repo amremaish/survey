@@ -331,6 +331,8 @@ class InvitationListCreateView(APIView):
 
     def post(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
+        if survey.status != SurveyStatus.ACTIVE:
+            return Response({"detail": "Survey is not active"}, status=status.HTTP_400_BAD_REQUEST)
         ser = InvitationCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         emails = list(ser.validated_data['emails'])

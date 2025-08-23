@@ -12,7 +12,7 @@ from django.utils.dateparse import parse_datetime
 from django.db import transaction
 
 from survey.celery import celery_app  # <-- important: from survey.celery
-from apps.surveys.models import Survey, SurveyInvitation, InvitationStatus
+from apps.surveys.models import Survey, SurveyInvitation, InvitationStatus, SurveyStatus
 
 logger = logging.getLogger(__name__)
 
@@ -42,11 +42,21 @@ def _parse_expires_at(expires_at_iso: str) -> timezone.datetime:
     retry_kwargs={"max_retries": 3},
     acks_late=True,
 )
-def send_invitation_email_task(self, emails: List[str], links: List[str], survey_title: str) -> int:
+def send_invitation_email_task(self, survey_id: int, emails: List[str], links: List[str], survey_title: str) -> int:
     """
     Send invitation emails (1:1 email->link). Expects equal-length lists.
     Uses a single SMTP connection for the whole batch.
     """
+    # Guard: do not send for inactive surveys
+    try:
+        survey = Survey.objects.only("status").get(pk=survey_id)
+        if survey.status != SurveyStatus.ACTIVE:
+            logger.info("Skipping invite emails: survey inactive", extra={"survey_id": survey_id, "status": survey.status})
+            return 0
+    except Exception:
+        # If survey lookup fails, avoid sending to be safe
+        logger.warning("Skipping invite emails: unable to load survey", extra={"survey_id": survey_id})
+        return 0
     if len(emails) != len(links):
         raise ValueError(f"emails/links length mismatch: {len(emails)} != {len(links)}")
 
@@ -139,7 +149,7 @@ def create_invitations_task(self, survey_id: int, emails: List[str], expires_at_
         links = [f"{base}/survey/{survey.code}?token={tok}" for tok in tokens]
 
         # Enqueue email sending for this chunk
-        send_invitation_email_task.delay(chunk, links, survey.title)
+        send_invitation_email_task.delay(survey.id, chunk, links, survey.title)
 
     logger.info("Invitations created", extra={"survey_id": survey_id, "count": total_created})
     return {"created": total_created}

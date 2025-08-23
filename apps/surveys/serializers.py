@@ -28,7 +28,7 @@ class QuestionCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = SurveyQuestion
         fields = [
-            "code", "prompt", "help_text", "type",
+            "code", "input_title", "type",
             "required", "sensitive", "constraints", "sort_order", "metadata"
         ]
         extra_kwargs = {
@@ -57,7 +57,7 @@ class QuestionReadSerializer(serializers.ModelSerializer):
     class Meta:
         model = SurveyQuestion
         fields = [
-            "id", "code", "prompt", "type",
+            "id", "code", "input_title", "type",
             "required", "sensitive", "constraints", "sort_order",
             "options"
         ]
@@ -70,6 +70,7 @@ class SectionReadSerializer(serializers.ModelSerializer):
 
 class SurveyDetailSerializer(serializers.ModelSerializer):
     sections = SectionReadSerializer(many=True, read_only=True)
+    status = serializers.CharField(read_only=True)
     class OrgBriefSerializer(serializers.ModelSerializer):
         class Meta:
             model = Organization
@@ -78,7 +79,7 @@ class SurveyDetailSerializer(serializers.ModelSerializer):
     organization = OrgBriefSerializer(read_only=True)
     class Meta:
         model = Survey
-        fields = ["id", "title", "sections", "organization"]
+        fields = ["id", "title", "sections", "organization", "status"]
 
 
 class InvitationCreateSerializer(serializers.Serializer):

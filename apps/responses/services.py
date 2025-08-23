@@ -15,7 +15,7 @@ from django.shortcuts import get_object_or_404
 
 from cryptography.fernet import Fernet
 
-from apps.surveys.models import Survey, SurveyQuestion, QuestionType, SurveyInvitation, InvitationStatus
+from apps.surveys.models import Survey, SurveyQuestion, QuestionType, SurveyInvitation, InvitationStatus, SurveyStatus
 from apps.survey_sessions.models import SurveySession, SessionStatus
 from .models import SurveyResponse, SurveyAnswer
 
@@ -202,7 +202,7 @@ def _validate_required_rules(q: SurveyQuestion, answers_by_code: Dict[str, Any],
 
     # Unconditional required:
     if q.required and not _is_present(answers_by_code.get(q.code)):
-        display = q.prompt or q.code or f"question #{q.id}"
+        display = getattr(q, 'input_title', None) or getattr(q, 'prompt', None) or q.code or f"question #{q.id}"
         raise ValueError(f"Missing required answer for {display}")
 
     # Conditional required:
@@ -223,7 +223,7 @@ def _validate_required_rules(q: SurveyQuestion, answers_by_code: Dict[str, Any],
         left, right = _coerce_for_compare(ref_q, left_raw, target_value)
         cond = False if (left is None or right is None) else _evaluate_condition(left, op_symbol, right)
         if cond and not _is_present(answers_by_code.get(q.code)):
-            display = q.prompt or q.code or f"question #{q.id}"
+            display = getattr(q, 'input_title', None) or getattr(q, 'prompt', None) or q.code or f"question #{q.id}"
             raise ValueError(f"Missing required answer for {display} (conditional)")
 
 
@@ -480,6 +480,10 @@ def _submit(
     """
     if not answers_by_code:
         raise ValueError("No answers to submit")
+
+    # Only allow submission when survey is active
+    if getattr(survey, "status", None) != SurveyStatus.ACTIVE:
+        raise ValueError("This survey is not accepting responses")
 
     index = SurveyIndex.build(survey)
 

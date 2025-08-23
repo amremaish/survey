@@ -46,8 +46,7 @@ class QuestionType(models.TextChoices):
 class SurveyQuestion(TimeStampedModel):
     section = models.ForeignKey(SurveySection, on_delete=models.CASCADE, related_name="questions")
     code = models.CharField(max_length=128)              # stable code used in answers/logic
-    prompt = models.TextField()
-    help_text = models.TextField(blank=True, null=True)
+    input_title = models.TextField()
     type = models.CharField(max_length=24, choices=QuestionType.choices)
     required = models.BooleanField(default=False)
     sensitive = models.BooleanField(default=False)       # if true, answer will be encrypted

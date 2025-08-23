@@ -111,6 +111,15 @@
   </div>
 </div>
 
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
+  <div id="toast" class="toast">
+    <div class="toast-header"><strong class="me-auto" id="toastTitle">Notice</strong>
+      <button class="btn-close" data-bs-dismiss="toast"></button>
+    </div>
+    <div class="toast-body" id="toastBody">Hello</div>
+  </div>
+</div>
+
 <script>
 const ORG_ID = {{ org_id }};
 const API_BASE = "http://localhost:8000";
@@ -121,7 +130,13 @@ const ENDPOINTS = {
   orgSurveys: (orgId, page, size, search) => API_BASE + "/api/v1/surveys/?organization_id=" + orgId + "&page=" + page + "&page_size=" + size + "&search=" + encodeURIComponent(search||''),
 };
 
-function notify(title, body){ /* optional toast hook */ }
+function notify(title, body){
+  try {
+    document.getElementById('toastTitle').textContent = title || 'Notice';
+    document.getElementById('toastBody').textContent = String(body || '');
+    new bootstrap.Toast(document.getElementById('toast')).show();
+  } catch(e) { console.log(title+': '+body); }
+}
 function getToken(){ return localStorage.getItem('access'); }
 function setTokens(a,r){ localStorage.setItem('access',a); localStorage.setItem('refresh',r||''); $('#logoutBtn').removeClass('d-none'); $('#loginBtnTop').addClass('d-none'); }
 function clearTokens(){ localStorage.removeItem('access'); localStorage.removeItem('refresh'); $('#logoutBtn').addClass('d-none'); $('#loginBtnTop').removeClass('d-none'); }
@@ -267,9 +282,14 @@ $(document).on('click', '#sendInvBtn', function(){
   const sid = $('#invModal').attr('data-survey-id');
   const emails = ($('#invEmails').val()||'').split(',').map(s=>s.trim()).filter(Boolean);
   const expires_at = $('#invExpiry').val();
-  if(!emails.length || !expires_at) return alert('Provide emails and expiry');
+  if(!emails.length || !expires_at){ notify('Invitation', 'Provide emails and expiry'); return; }
   ajaxAuth({ url: API_BASE + '/api/v1/surveys/' + sid + '/invitations/', method:'POST', contentType:'application/json', data: JSON.stringify({ survey_id: sid, emails, expires_at }) })
-    .done(()=>{ loadInvites(sid); try{ bootstrap.Modal.getInstance(document.getElementById('invModal')).hide(); }catch(e){}; new bootstrap.Modal('#invStatusModal').show(); })
+    .done(()=>{ try{ bootstrap.Modal.getInstance(document.getElementById('invModal')).hide(); }catch(e){}; notify('Invitation', 'Invitations queued successfully.'); loadInvites(sid); new bootstrap.Modal('#invStatusModal').show(); })
+    .fail((xhr)=>{
+      let msg='Failed to send invitations';
+      try{ msg = (xhr.responseJSON && (xhr.responseJSON.detail||xhr.responseJSON.error)) || xhr.responseText || msg; }catch(e){}
+      notify('Invitation', msg);
+    })
 });
 
 // Invitation status modal (backend-filtered + paginated)

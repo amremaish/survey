@@ -118,3 +118,31 @@ class OrgMemberDetailView(APIView):
         m = get_object_or_404(OrganizationMember, pk=member_id, organization=org)
         m.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MyOrganizationsView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        org_ids = (
+            OrganizationMember.objects
+            .filter(user=request.user)
+            .values_list("organization_id", flat=True)
+        )
+        qs = Organization.objects.filter(id__in=list(org_ids)).order_by("id")
+        data = OrganizationSerializer(qs, many=True).data
+        return Response({"count": len(data), "results": data})
+
+
+class MeView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        u = request.user
+        return Response({
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "first_name": u.first_name,
+            "last_name": u.last_name,
+        })

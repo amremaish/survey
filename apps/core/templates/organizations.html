@@ -165,7 +165,7 @@
 
 <script>
     // ================= CONFIG =================
-    const API_BASE = "http://localhost:8000"; // change this if needed
+    const API_BASE = "http://127.0.0.1:8000"; // unified host
     const ENDPOINTS = {
         token: API_BASE + "/api/token/",
         // orgs (list/create) — existing API under /api/v1/orgs/
@@ -234,28 +234,9 @@
     let CURRENT_ORG = null; // object with members list
 
     // ================= AUTH =================
-    $('#loginBtn').on('click', function () {
-        const username = $('#loginUsername').val().trim();
-        const password = $('#loginPassword').val();
-        $.ajax({
-            url: ENDPOINTS.token,
-            method: 'POST',
-            contentType: 'application/json',
-            data: JSON.stringify({username, password})
-        }).done((d) => {
-            setTokens(d.access, d.refresh);
-            notify('Login', 'Authenticated');
-            bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
-            loadOrgs();
-        }).fail(() => notify('Login', 'Invalid credentials'));
-    });
-    $('#logoutBtn').on('click', function () {
-        clearTokens();
-        $('#orgTable').empty();
-        $('#orgCount').text('0 organizations');
-    });
-    setAuthUI(!!getToken());
-    if (getToken()) loadOrgs();
+    // Enforce JWT: redirect to /login if missing
+    if (!getToken()) { window.location.href = '/login?next=' + encodeURIComponent(window.location.pathname); }
+    else { loadOrgs(); }
 
     // ================= ORG LIST =================
     function loadOrgs() {
