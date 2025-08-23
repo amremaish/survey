@@ -40,6 +40,13 @@ A Django + DRF application for building surveys, collecting responses, and manag
    - Swagger UI: http://localhost:8000/api/docs/
    - Redoc: http://localhost:8000/api/redoc/
 
+
+## Testing
+- Uses separate SQLite DB (`db_test.sqlite3`)
+```bash
+docker compose run --rm web python manage.py test
+```
+
 ## Environment
 See `.env-example` for all variables. Key settings:
 
@@ -149,11 +156,6 @@ celery -A survey.celery:celery_app worker --loglevel=INFO
 celery -A survey.celery:celery_app beat --loglevel=INFO
 ```
 
-## Testing
-- Uses separate SQLite DB (`db_test.sqlite3`)
-```bash
-docker compose run --rm web python manage.py test
-```
 
 ## License
 Proprietary. All rights reserved (update as appropriate).
