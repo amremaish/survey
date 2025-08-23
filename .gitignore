@@ -21,6 +21,7 @@ env/
 *.pyc
 db.sqlite3
 db.sqlite3-journal
+db_test.sqlite3
 media/
 staticfiles/
 static/

@@ -44,7 +44,7 @@ class SurveyListCreateView(APIView):
           Organization can be provided as serializer field or request.data["organization_id"].
           Auto-generates a unique `code` from the title.
     """
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles_by_method = {"POST": [Roles.EDITOR.value]}
 
     def get(self, request):
