@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# VCS
+.git
+.gitignore
+
+# Editor/IDE
+.vscode/
+.idea/
+
+# Bytecode/compiled
+*.pyc
+
+# Django
+/static/
+/media/
+celerybeat-schedule*
+db.sqlite3
+
+# Env
+.env
+.venv/
+
+# Tests/artifacts
+.coverage
+htmlcov/
+
+# Node/npm (if any future assets)
+node_modules/
