@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import permissions
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 from apps.responses.models import SurveyResponse
 from apps.surveys.models import SurveyInvitation, InvitationStatus, SurveyStatus
@@ -19,6 +20,15 @@ class OverallSubmissionsView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles = [Roles.VIEWER]
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Overall submissions (day)",
+                value={"labels": ["2025-08-01", "2025-08-02"], "data": [5, 7]},
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request):
         """
         Returns time series of submissions grouped by day or ISO week.
@@ -65,6 +75,15 @@ class SubmissionsByOrganizationView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles = [Roles.VIEWER]
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Top orgs",
+                value={"labels": ["Acme", "Globex"], "data": [12, 7]},
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request):
         """Total responses per organization (top N, default 10)."""
         try:
@@ -88,6 +107,15 @@ class InvitationStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles = [Roles.VIEWER]
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Invitation status",
+                value={"labels": ["pending", "submitted", "expired"], "data": [3, 10, 1]},
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request):
         """
         Counts invitations by status.
@@ -118,6 +146,15 @@ class ResponsesBySurveyStatusView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles = [Roles.VIEWER]
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Responses by survey status",
+                value={"labels": ["draft", "active", "archived"], "data": [2, 15, 4]},
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request):
         """Counts responses grouped by parent survey status (draft/active/archived)."""
         series = (

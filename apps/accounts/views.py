@@ -15,11 +15,21 @@ from .serializers import (
     OrganizationCreateSerializer,
     OrgMemberSerializer,
 )
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 class OrganizationListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles_by_method = {"GET": [Roles.VIEWER.value], "POST": [Roles.EDITOR.value]}
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "List organizations",
+                value={"count": 1, "results": [{"id": 2, "name": "Acme", "contact_email": "info@acme.com"}]},
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request):
         qs = Organization.objects.all().order_by("id")
         search = (request.query_params.get("search") or "").strip()
@@ -41,6 +51,15 @@ class OrganizationListCreateView(APIView):
         data = OrganizationSerializer(page_obj.object_list, many=True).data
         return Response({"count": paginator.count, "results": data})
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Create organization",
+                value={"name": "Acme", "contact_email": "info@acme.com"},
+                request_only=True,
+            )
+        ]
+    )
     def post(self, request):
         serializer = OrganizationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -89,6 +108,20 @@ class OrgMembersView(APIView):
         data = OrgMemberSerializer(items, many=True).data
         return Response({"count": count, "results": data})
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Add member by creating user",
+                value={"username": "john", "email": "john@acme.com", "password": "P@ssw0rd"},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Add existing user to org",
+                value={"user_id": 5},
+                request_only=True,
+            ),
+        ]
+    )
     def post(self, request, org_id: int):
         org = get_object_or_404(Organization, pk=org_id)
         # create user if username/email/password provided; else expect user_id

@@ -5,6 +5,7 @@ from apps.core.permissions import HasAllRoles
 from apps.core.enums import Roles
 from django.shortcuts import get_object_or_404
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 from .serializers import (
     SubmitBySessionSerializer, SubmitDirectSerializer, SurveyResponseReadSerializer,
@@ -25,6 +26,27 @@ class SubmitResponseView(APIView):
     # Public submission allowed
     permission_classes = []
 
+    @extend_schema(
+        description="Submit a survey response either by active session or directly by survey id.",
+        examples=[
+            OpenApiExample(
+                "Session-based submission",
+                value={
+                    "session_id": 123,
+                    "answers": {"q-1": "Alice", "q-2": 30}
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Direct submission",
+                value={
+                    "survey_id": 10,
+                    "answers": {"q-1": "Alice", "q-3": True}
+                },
+                request_only=True,
+            ),
+        ],
+    )
     def post(self, request):
         # Try session-based first
         if "session_id" in request.data:
@@ -55,6 +77,24 @@ class ResponseDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles = [Roles.VIEWER.value]
 
+    @extend_schema(
+        description="Get a single response with decrypted answers for users in the same organization.",
+        examples=[
+            OpenApiExample(
+                "Example response",
+                value={
+                    "id": 1,
+                    "survey": 3,
+                    "respondent_email": "user@example.com",
+                    "submitted_at": "2025-08-22T23:15:52Z",
+                    "answers": [
+                        {"question_id": 5, "code": "q-1", "input_title": "Name", "section_title": "Profile", "value": "Alice"}
+                    ]
+                },
+                response_only=True,
+            )
+        ],
+    )
     def get(self, request, response_id: int):
         resp = get_object_or_404(SurveyResponse.objects.select_related("survey").prefetch_related("answers"), pk=response_id)
         # Enforce organization membership

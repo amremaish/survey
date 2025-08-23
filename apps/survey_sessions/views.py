@@ -2,6 +2,7 @@ from django.shortcuts import get_object_or_404
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 from apps.surveys.models import Survey, SurveyInvitation, InvitationStatus
 from apps.accounts.models import Organization
@@ -22,6 +23,20 @@ class SessionStartView(APIView):
     # Public to allow anonymous runners
     permission_classes = []
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Start session (public)",
+                value={"survey_id": 3},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Start with invitation token",
+                value={"survey_id": 3, "token": "<invitation-token>"},
+                request_only=True,
+            ),
+        ]
+    )
     def post(self, request):
         payload = SessionStartSerializer(data=request.data)
         payload.is_valid(raise_exception=True)
@@ -63,6 +78,15 @@ class SessionAutosaveView(APIView):
     """
     permission_classes = []
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Autosave partial payload",
+                value={"partial_payload": {"q-1": "Alice"}},
+                request_only=True,
+            )
+        ]
+    )
     def patch(self, request, session_id: int):
         sess = get_object_or_404(SurveySession, pk=session_id)
         ser = SessionAutosaveSerializer(data=request.data)

@@ -29,6 +29,7 @@ from apps.core.utility import (
 )
 from apps.core.serializer import PaginationQuerySerializer
 from apps.core.enums import Roles
+from drf_spectacular.utils import extend_schema, OpenApiExample
 
 
 class SurveyListCreateView(APIView):
@@ -47,6 +48,15 @@ class SurveyListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles_by_method = {"POST": [Roles.EDITOR.value]}
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "List surveys (filtered)",
+                value={"count": 1, "results": [{"id": 1, "title": "Customer NPS", "status": "active", "code": "customer-nps"}]},
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request):
         qs = (
             Survey.objects
@@ -85,6 +95,20 @@ class SurveyListCreateView(APIView):
         })
 
     @transaction.atomic
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Create survey",
+                value={"title": "Employee Engagement", "organization_id": 2, "status": "active"},
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Created survey",
+                value={"id": 10, "title": "Employee Engagement", "status": "active", "code": "employee-engagement"},
+                response_only=True,
+            )
+        ]
+    )
     def post(self, request):
         ser = SurveyCreateSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
@@ -160,6 +184,22 @@ class SurveyDetailByCodeView(APIView):
     """
     permission_classes = []  # AllowAny
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Survey by code",
+                value={
+                    "id": 3,
+                    "code": "survey-1",
+                    "title": "Customer Feedback",
+                    "sections": [
+                        {"id": 1, "title": "Profile", "questions": [{"id": 5, "code": "q-1", "input_title": "Name", "type": "text"}]}
+                    ]
+                },
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request, survey_code: str):
         cache_key = f"survey_detail:{survey_code}"
         cached = cache.get(cache_key)
@@ -326,6 +366,21 @@ class InvitationListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated, HasAllRoles]
     required_roles = []
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "List invitations",
+                value={
+                    "count": 2,
+                    "results": [
+                        {"email": "a@example.com", "status": "pending", "token": "..."},
+                        {"email": "b@example.com", "status": "submitted", "token": "..."}
+                    ]
+                },
+                response_only=True,
+            )
+        ]
+    )
     def get(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
 
@@ -352,6 +407,23 @@ class InvitationListCreateView(APIView):
             'results': InvitationReadSerializer(page_obj.object_list, many=True).data,
         })
 
+    @extend_schema(
+        examples=[
+            OpenApiExample(
+                "Create invitations",
+                value={
+                    "emails": ["user1@example.com", "user2@example.com"],
+                    "expires_at": "2025-12-31T23:59:00Z"
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Queued result",
+                value={"queued": True, "count": 2},
+                response_only=True,
+            )
+        ]
+    )
     def post(self, request, survey_id: int):
         survey = get_object_or_404(Survey, pk=survey_id)
         try:

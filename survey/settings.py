@@ -54,6 +54,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
+    "drf_spectacular",
+    "drf_spectacular_sidecar",
     "auditlog",
     "corsheaders",
     "apps.core",
@@ -71,6 +73,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.IsAuthenticated",
     ],
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
 
@@ -235,3 +238,21 @@ CELERY_TASK_EAGER_PROPAGATES = True
 
 # Public base URL for links in emails (set to your deployment domain)
 SITE_URL = os.getenv('SITE_URL', 'http://localhost:8000')
+
+# OpenAPI / Swagger (drf-spectacular)
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Survey API",
+    "DESCRIPTION": "OpenAPI schema and Swagger UI for Survey Suite APIs.",
+    "VERSION": "1.0.0",
+    # Use sidecar assets for offline Swagger/Redoc
+    "SWAGGER_UI_DIST": "SIDECAR",
+    "SWAGGER_UI_FAVICON_HREF": "SIDECAR",
+    "REDOC_DIST": "SIDECAR",
+    # JWT bearer auth
+    "COMPONENTS": {
+        "securitySchemes": {
+            "bearerAuth": {"type": "http", "scheme": "bearer", "bearerFormat": "JWT"}
+        }
+    },
+    "SECURITY": [{"bearerAuth": []}],
+}
