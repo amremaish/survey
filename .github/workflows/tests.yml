@@ -14,12 +14,15 @@ jobs:
       DJANGO_SETTINGS_MODULE: survey.settings
       SECRET_KEY: github-ci-secret
       DEBUG: "0"
-      # Force SQLite for tests is already in settings; ensure Celery runs in eager mode
       CELERY_EAGER: "1"
-      # Prevent real emails in CI
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
-      # Provide required encryption secret
       RESPONSES_ENCRYPTION_SECRET: ci-encryption-secret
+      # Force SQLite DB for CI (avoids external Postgres)
+      DB_ENGINE: django.db.backends.sqlite3
+      DB_NAME: /__w/survey/survey/db_ci.sqlite3
+      # Use in-memory cache to avoid Redis
+      CACHE_BACKEND: django.core.cache.backends.locmem.LocMemCache
+      CACHE_LOCATION: survey-cache
 
     steps:
       - name: Checkout
@@ -29,7 +32,6 @@ jobs:
         run: |
           apk add --no-cache \
             build-base \
-            postgresql-dev \
             libffi-dev \
             openssl-dev \
             jpeg-dev \
@@ -40,7 +42,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run migrations (SQLite for tests)
+      - name: Run migrations (SQLite for CI)
         run: |
           python manage.py migrate --noinput
 
