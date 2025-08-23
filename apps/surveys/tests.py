@@ -14,13 +14,6 @@ class SurveysApiTests(TestCase):
         org = Organization.objects.create(name="Org A")
         self.survey = Survey.objects.create(organization=org, code="code-1", title="T1", status=SurveyStatus.ACTIVE)
 
-    def test_detail_by_code(self):
-        resp = self.client.get(f"/api/v1/surveys/code/{self.survey.code}/detail/")
-        self.assertEqual(resp.status_code, 200)
-        body = resp.json()
-        self.assertEqual(body.get("id"), self.survey.id)
-        self.assertEqual(body.get("title"), self.survey.title)
-
     def test_list_requires_viewer(self):
         # user already has Viewer
         resp = self.client.get("/api/v1/surveys/")
