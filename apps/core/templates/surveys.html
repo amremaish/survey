@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Surveys Manager • Bootstrap 5 + jQuery + JWT</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.bootstrap5.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+</head>
+<body>
+  {% include 'partials/navbar.html' %}
+
+  <main class="container py-4">
+    <div class="panel p-3 mb-3 bg-white rounded-3 shadow-sm">
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-primary" id="newSurveyBtn">+ New Survey</button>
+        <div style="min-width:280px">
+          <select id="orgFilter" placeholder="All organizations"></select>
+        </div>
+        <div style="min-width:180px">
+          <select id="statusFilter" class="form-select">
+            <option value="">All statuses</option>
+            <option value="draft">draft</option>
+            <option value="active">active</option>
+            <option value="archived">archived</option>
+          </select>
+        </div>
+        <div class="ms-auto input-group" style="max-width:420px">
+          <span class="input-group-text">Search</span>
+          <input id="searchBox" class="form-control" placeholder="title">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel p-0 bg-white rounded-3 shadow-sm">
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width:60px">#</th>
+              <th>Title</th>
+              <th>Code</th>
+              <th>Description</th>
+              <th>Status</th>
+              <th style="width:220px">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="surveyTable"></tbody>
+        </table>
+      </div>
+      <div class="p-3 d-flex justify-content-between border-top">
+        <div class="text-muted small" id="surveyCount">0 surveys</div>
+        <div class="btn-group">
+          <button class="btn btn-outline-secondary btn-sm" id="prevPage">Prev</button>
+          <button class="btn btn-outline-secondary btn-sm" id="nextPage">Next</button>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Create/Edit Modal -->
+  <div class="modal fade" id="surveyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="surveyModalTitle">New Survey</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form class="vstack gap-2">
+            <div>
+              <label class="form-label">Title</label>
+              <input type="text" class="form-control" id="modalTitle" required>
+            </div>
+            <div>
+              <label class="form-label">Description</label>
+              <textarea class="form-control" id="modalDescription" rows="3" placeholder="Optional"></textarea>
+            </div>
+            <div>
+              <label class="form-label">Organization</label>
+              <select id="modalOrg" placeholder="Select organization"></select>
+            </div>
+            <div>
+              <label class="form-label">Status</label>
+              <select class="form-select" id="modalStatus">
+                <option value="draft">draft</option>
+                <option value="active">active</option>
+                <option value="archived">archived</option>
+              </select>
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" class="btn btn-primary" id="saveSurveyBtn">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
+    <div id="toast" class="toast">
+      <div class="toast-header"><strong class="me-auto" id="toastTitle">Notice</strong>
+        <button class="btn-close" data-bs-dismiss="toast"></button>
+      </div>
+      <div class="toast-body" id="toastBody">Hello</div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+const ENDPOINTS = {
+  token: API_BASE + "/api/token/",
+  surveys: API_BASE + "/api/v1/surveys/",
+  surveyDetail: (id) => API_BASE + "/api/v1/surveys/" + id + "/detail/",
+  orgs: API_BASE + "/api/v1/orgs/",
+};
+function notify(title, body){ $('#toastTitle').text(title); $('#toastBody').text(body); new bootstrap.Toast('#toast').show(); }
+function getToken(){ return localStorage.getItem('access'); }
+function ajaxAuth(opts){ const t=getToken(); opts.headers=opts.headers||{}; if(t) opts.headers['Authorization']='Bearer '+t; return $.ajax(opts).fail((xhr)=>{ if(xhr.status===401) notify('Auth','Unauthorized'); else notify('Error '+xhr.status, xhr.responseText||'Request failed'); }); }
+
+let PAGE=1, PAGE_SIZE=10, COUNT=0, CURRENT=null;
+let SURVEYS_ORG_FILTER=null, SURVEYS_ORG_SELECT=null;
+
+function loadSurveys(){
+  const q = ($('#searchBox').val()||'').trim();
+  const orgId = (SURVEYS_ORG_FILTER && SURVEYS_ORG_FILTER.getValue()) || '';
+  const statusVal = ($('#statusFilter').val()||'').trim();
+  const params = `?page=${PAGE}&page_size=${PAGE_SIZE}&search=${encodeURIComponent(q)}${orgId?`&organization_id=${encodeURIComponent(orgId)}`:''}${statusVal?`&status=${encodeURIComponent(statusVal)}`:''}`;
+  ajaxAuth({ url: ENDPOINTS.surveys + params, method:'GET' }).done((data)=>{
+    const rows=data.results||[]; COUNT=data.count||0; $('#surveyTable').empty();
+    rows.forEach(r=> $('#surveyTable').append(`<tr data-id="${r.id}"><td>${r.id}</td><td>${r.title}</td><td><code>${r.code||''}</code></td><td>${r.description||''}</td><td>${r.status}</td><td><div class='btn-group btn-group-sm'><a class='btn btn-outline-secondary' href="/survey/${encodeURIComponent(r.code||'')}" target='_blank'>Open</a><button class='btn btn-outline-primary edit'>Edit</button><button class='btn btn-outline-danger delete'>Delete</button></div></td></tr>`));
+    $('#surveyCount').text(`${COUNT} surveys`);
+    $('#prevPage').prop('disabled', PAGE<=1);
+    $('#nextPage').prop('disabled', (PAGE*PAGE_SIZE)>=COUNT);
+  });
+}
+
+function initOrgSelects(){
+  // Toolbar filter
+  if(!SURVEYS_ORG_FILTER){
+    SURVEYS_ORG_FILTER = new TomSelect('#orgFilter', {
+      valueField: 'id', labelField: 'name', searchField: ['name'],
+      allowEmptyOption: true, placeholder: 'All organizations',
+      preload: true,
+      load: function(query, cb){
+        const url = ENDPOINTS.orgs+`?page=1&page_size=20&search=${encodeURIComponent(query||'')}`;
+        ajaxAuth({ url, method:'GET' }).done((data)=>{ cb(data.results||data||[]); }).fail(()=>cb());
+      }
+    });
+    SURVEYS_ORG_FILTER.on('change', function(){ PAGE=1; loadSurveys(); });
+  }
+  // Modal selector
+  if(!SURVEYS_ORG_SELECT){
+    SURVEYS_ORG_SELECT = new TomSelect('#modalOrg', {
+      valueField: 'id', labelField: 'name', searchField: ['name'],
+      allowEmptyOption: true, placeholder: 'Select organization',
+      preload: true,
+      load: function(query, cb){
+        const url = ENDPOINTS.orgs+`?page=1&page_size=20&search=${encodeURIComponent(query||'')}`;
+        ajaxAuth({ url, method:'GET' }).done((data)=>{ cb(data.results||data||[]); }).fail(()=>cb());
+      }
+    });
+  }
+}
+
+$('#searchBox').on('input', function(){ PAGE=1; loadSurveys(); });
+$('#prevPage').on('click', function(){ if(PAGE>1){ PAGE--; loadSurveys(); }});
+$('#nextPage').on('click', function(){ if((PAGE*PAGE_SIZE)<COUNT){ PAGE++; loadSurveys(); }});
+$('#statusFilter').on('change', function(){ PAGE=1; loadSurveys(); });
+
+$('#newSurveyBtn').on('click', function(){ CURRENT=null; $('#surveyModalTitle').text('New Survey'); $('#modalTitle').val(''); $('#modalDescription').val(''); $('#modalStatus').val('draft'); if(SURVEYS_ORG_SELECT){ SURVEYS_ORG_SELECT.clear(true); } new bootstrap.Modal('#surveyModal').show(); });
+
+$(document).on('click', '.edit', function(){ const id=$(this).closest('tr').data('id'); ajaxAuth({ url: ENDPOINTS.surveyDetail(id), method:'GET' }).done((s)=>{ CURRENT=s; $('#surveyModalTitle').text('Edit Survey #' + s.id); $('#modalTitle').val(s.title||''); $('#modalDescription').val(s.description||''); $('#modalStatus').val(s.status||'draft');
+  const orgId = s.organization_id || (s.organization && (s.organization.id||s.organization)) || '';
+  if(SURVEYS_ORG_SELECT){
+    if(orgId){
+      // ensure option exists before setting
+      SURVEYS_ORG_SELECT.addOption({ id: orgId, name: s.organization_name || (`#${orgId}`) });
+      SURVEYS_ORG_SELECT.setValue(String(orgId), true);
+    } else { SURVEYS_ORG_SELECT.clear(true); }
+  }
+  new bootstrap.Modal('#surveyModal').show();
+}); });
+
+$(document).on('click', '.delete', function(){ const id=$(this).closest('tr').data('id'); if(!confirm('Delete survey #' + id + ' ?')) return; ajaxAuth({ url: ENDPOINTS.surveyDetail(id), method:'DELETE' }).done(()=>{ notify('Survey','Deleted #' + id); loadSurveys(); }); });
+
+$('#saveSurveyBtn').on('click', function(){ const payload={ title: $('#modalTitle').val().trim(), description: ($('#modalDescription').val()||'').trim(), status: $('#modalStatus').val(), organization_id: (parseInt((SURVEYS_ORG_SELECT && SURVEYS_ORG_SELECT.getValue())||'0',10)||null) }; if(!payload.title) return notify('Validation','Title required'); if(!payload.organization_id) return notify('Validation','Organization is required'); if(CURRENT){ ajaxAuth({ url: ENDPOINTS.surveyDetail(CURRENT.id), method:'PATCH', contentType:'application/json', data: JSON.stringify(payload) }).done(()=>{ notify('Survey','Updated'); bootstrap.Modal.getInstance(document.getElementById('surveyModal')).hide(); loadSurveys(); }); } else { ajaxAuth({ url: ENDPOINTS.surveys, method:'POST', contentType:'application/json', data: JSON.stringify(payload) }).done(()=>{ notify('Survey','Created'); bootstrap.Modal.getInstance(document.getElementById('surveyModal')).hide(); loadSurveys(); }); } });
+
+// init
+initOrgSelects();
+if(getToken()) loadSurveys();
+</script>
+
+</body>
+</html>
+

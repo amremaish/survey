@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<body style="font-family:Arial,Helvetica,sans-serif; margin:0; padding:24px; background:#f7f7fb;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px; margin:0 auto; background:#fff; border-radius:8px; overflow:hidden;">
+    <tr><td style="background:#0b7285; color:#fff; padding:16px 20px; font-weight:600;">Survey Invitation</td></tr>
+    <tr><td style="padding:20px;">
+      <h2 style="margin-top:0;">You're invited to complete a survey</h2>
+      <p>Survey: <strong>{{ survey_title }}</strong></p>
+      <p>Please click the button below to begin. This link is unique to your email.</p>
+      <p style="margin:24px 0;"><a href="{{ invite_url }}" style="background:#0b7285; color:#fff; padding:10px 16px; border-radius:6px; text-decoration:none;">Start Survey</a></p>
+      <p>If the button doesn't work, copy and paste this URL:</p>
+      <p><a href="{{ invite_url }}">{{ invite_url }}</a></p>
+      <p style="color:#6c757d; font-size:12px;">If you did not expect this email, you can safely ignore it.</p>
+    </td></tr>
+  </table>
+</body>
+</html>
+
+

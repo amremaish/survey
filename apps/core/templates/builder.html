@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Survey Builder • Bootstrap 5 + jQuery + JWT</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+  <style>
+    body { background: #f7f7fb; }
+    .builder { display: grid; grid-template-columns: 300px 1fr 380px; gap: 16px; }
+    .panel { background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.06); }
+    .panel h6 { font-weight: 700; }
+    .droppable { min-height: 60px; border: 2px dashed #ced4da; border-radius: 12px; padding: 12px; background: #fcfcfe; transition: .15s; }
+    .droppable.drag-over { background: #eef8ff; border-color: #339af0; }
+    .palette .item { cursor: grab; user-select: none; }
+    .question-card { border-left: 4px solid #dee2e6; }
+    /* Slightly bigger question cards */
+    .question-card .card-body { padding-top: 0.9rem; padding-bottom: 0.9rem; }
+    .question-card[data-type="dropdown"], .badge-type[data-type="dropdown"] { border-left-color: #845ef7; }
+    .question-card[data-type="radio"], .badge-type[data-type="radio"] { border-left-color: #339af0; }
+    .question-card[data-type="checkbox"], .badge-type[data-type="checkbox"] { border-left-color: #51cf66; }
+    .question-card[data-type="text"], .badge-type[data-type="text"] { border-left-color: #ffa94d; }
+    .question-card[data-type="number"], .badge-type[data-type="number"] { border-left-color: #ff6b6b; }
+    .question-card[data-type="date"], .badge-type[data-type="date"] { border-left-color: #12b886; }
+    /* Slightly bigger section cards */
+    .section-card { border: 1px solid #e9ecef; border-radius: 12px; padding: 16px; margin-bottom: 14px; background: #fff; }
+    .section-header { display:flex; align-items:center; justify-content:space-between; }
+    .badge-type { font-size: .75rem; background: #f1f3f5; color:#495057; }
+    .option-row input { max-width: 160px; }
+    .pointer { cursor: pointer; }
+    .circle-dot { display:inline-block; min-width: 10px; width:10px; height:10px; border-radius:50%; background:#0dcaf0; }
+  </style>
+</head>
+<body>
+  {% include 'partials/navbar.html' %}
+
+  <main class="container py-4">
+    <!-- Create Survey section removed -->
+
+    <div class="panel p-3 mb-3">
+      <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+          <label class="form-label">Organization</label>
+          <select id="builderOrgFilter" placeholder="All organizations"></select>
+        </div>
+        <div class="col-md-5">
+          <label class="form-label">Pick Existing Survey</label>
+          <div class="input-group">
+            <select class="form-select" id="surveyPicker">
+              <option value="">— select —</option>
+            </select>
+            <button type="button" class="btn btn-outline-secondary" id="loadSurveyBtn">Load</button>
+          </div>
+        </div>
+        <div class="col-md-3 d-flex align-items-end justify-content-end">
+          <div>
+            <span class="text-muted small">Survey ID:</span>
+            <span id="currentSurveyId" class="fw-bold">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="builder">
+      <!-- Palette -->
+      <div class="panel p-3 palette">
+        <h6 class="mb-3">Palette</h6>
+        <div class="list-group" id="paletteList">
+          <div class="list-group-item d-flex justify-content-between align-items-center item" draggable="true" data-qtype="text">
+            Text <span class="badge badge-type" data-type="text">text</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center item" draggable="true" data-qtype="number">
+            Number <span class="badge badge-type" data-type="number">number</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center item" draggable="true" data-qtype="date">
+            Date <span class="badge badge-type" data-type="date">date</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center item" draggable="true" data-qtype="dropdown">
+            Dropdown <span class="badge badge-type" data-type="dropdown">dropdown</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center item" draggable="true" data-qtype="radio">
+            Radio <span class="badge badge-type" data-type="radio">radio</span>
+          </div>
+          <div class="list-group-item d-flex justify-content-between align-items-center item" draggable="true" data-qtype="checkbox">
+            Checkbox <span class="badge badge-type" data-type="checkbox">checkbox</span>
+          </div>
+        </div>
+        <hr>
+        <button class="btn btn-outline-primary w-100" id="addSectionBtn">+ Add Section</button>
+      </div>
+
+      <!-- Canvas -->
+      <div class="panel p-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h6 class="mb-0">Canvas</h6>
+          <small class="text-muted">Drag items into a section, or click a palette item to add to the selected section.</small>
+        </div>
+        <div id="sectionsList"></div>
+      </div>
+
+      <!-- Properties -->
+      <div class="panel p-3">
+        <h6 class="mb-3">Properties</h6>
+        <div id="propertiesEmpty" class="text-muted">Select a question to edit its properties.</div>
+        <form id="questionForm" class="d-none">
+          <ul class="nav nav-tabs mb-3" id="propTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" id="tab-basic-tab" data-bs-toggle="tab" data-bs-target="#tab-basic" type="button" role="tab">Basic</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" id="tab-constraints-tab" data-bs-toggle="tab" data-bs-target="#tab-constraints" type="button" role="tab">Constraints</button>
+            </li>
+          </ul>
+          <div class="tab-content" id="propTabContent">
+            <div class="tab-pane fade show active" id="tab-basic" role="tabpanel">
+              <div class="mb-2">
+                <label class="form-label">Section</label>
+                <select class="form-select" id="propSection"></select>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Code (auto-generated)</label>
+                <input type="text" class="form-control" id="propCode" disabled>
+              </div>
+              <div class="mb-2">
+                <label class="form-label">Prompt</label>
+                <textarea class="form-control" id="propPrompt" rows="2" required></textarea>
+              </div>
+              <div class="row g-2 mb-2">
+                <div class="col">
+                  <label class="form-label">Type</label>
+                  <select class="form-select" id="propType">
+                    <option value="text">text</option>
+                    <option value="number">number</option>
+                    <option value="date">date</option>
+                    <option value="dropdown">dropdown</option>
+                    <option value="radio">radio</option>
+                    <option value="checkbox">checkbox</option>
+                  </select>
+                </div>
+                <div class="col">
+                  <label class="form-label">Sort Order</label>
+                  <input type="number" class="form-control" id="propOrder" value="1" min="1">
+                </div>
+              </div>
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="propRequired">
+                <label class="form-check-label" for="propRequired">Required</label>
+              </div>
+              <div class="form-check form-switch mb-2">
+                <input class="form-check-input" type="checkbox" id="propSensitive">
+                <label class="form-check-label" for="propSensitive">Sensitive (encrypted)</label>
+              </div>
+
+              <div id="optionsEditor" class="mb-3 d-none">
+                <div class="d-flex align-items-center justify-content-between">
+                  <label class="form-label mb-1">Options</label>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="addOptionBtn">+ Add Option</button>
+                </div>
+                <div id="optionsList" class="vstack gap-2 mt-2"></div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tab-constraints" role="tabpanel">
+              <div class="mb-2 d-flex align-items-center justify-content-between">
+                <label class="form-label mb-1">Constraints</label>
+                <div class="d-flex align-items-center flex-nowrap gap-2" style="width:auto">
+                  <select class="form-select form-select-sm" id="constraintQuickAddSelect" style="min-width: 220px"></select>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="constraintQuickAddBtn" aria-label="Add constraint" title="Add">+</button>
+                </div>
+              </div>
+              <div id="constraintsRows" class="vstack gap-2 mb-2"></div>
+              <div class="mb-2">
+                <label class="form-label">JSON Preview</label>
+                <pre id="constraintsPreview" class="form-control" style="height: 160px; overflow:auto;">{}</pre>
+                <textarea class="form-control d-none" id="propConstraints" rows="2">{}</textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button type="button" id="saveQuestionBtn" class="btn btn-primary">Save Question</button>
+            <button type="button" id="resetFormBtn" class="btn btn-outline-secondary">Reset</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <!-- Login Modal -->
+  <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Login</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-control" id="loginUsername" placeholder="admin" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" />
+          </div>
+          <div class="alert alert-warning small">Your API must expose <code>/api/token/</code> for JWT. CORS must allow this origin.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" id="loginBtn" class="btn btn-primary">Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header">
+        <strong class="me-auto" id="toastTitle">Notice</strong>
+        <small class="text-muted" id="toastTime">Just now</small>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body" id="toastBody">Hello!</div>
+    </div>
+  </div>
+
+<script>
+// ===================== CONFIG =====================
+const API_BASE = "http://localhost:8000"; // change to your backend
+const ENDPOINTS = {
+  token: API_BASE + "/api/token/",
+  surveys: API_BASE + "/api/v1/surveys/",
+  surveyDetail: (id) => API_BASE + "/api/v1/surveys/" + id + "/detail/",
+  sections: (surveyId) => API_BASE + "/api/v1/surveys/" + surveyId + "/sections/",
+  questions: (sectionId) => API_BASE + "/api/v1/surveys/sections/" + sectionId + "/questions/",
+  questionUpdate: (questionId) => API_BASE + "/api/v1/surveys/questions/" + questionId + "/",
+  options: (questionId) => API_BASE + "/api/v1/surveys/questions/" + questionId + "/options/",
+  orgs: API_BASE + "/api/v1/orgs/",
+};
+
+function notify(title, body) {
+  $("#toastTitle").text(title);
+  $("#toastBody").text(body);
+  $("#toastTime").text(new Date().toLocaleTimeString());
+  const t = new bootstrap.Toast(document.getElementById('toast'));
+  t.show();
+}
+
+function setAuthUI(loggedIn) {
+  if (loggedIn) {
+    $("#authStatus").removeClass('text-warning').addClass('text-success').text('Authenticated');
+    $("#logoutBtn").removeClass('d-none');
+  } else {
+    $("#authStatus").removeClass('text-success').addClass('text-warning').text('Not authenticated');
+    $("#logoutBtn").addClass('d-none');
+  }
+}
+
+function getAccessToken() { return localStorage.getItem('access'); }
+function setTokens(access, refresh) { localStorage.setItem('access', access); localStorage.setItem('refresh', refresh || ''); setAuthUI(true); }
+function clearTokens() { localStorage.removeItem('access'); localStorage.removeItem('refresh'); setAuthUI(false); }
+
+function ajaxWithAuth(opts) {
+  const token = getAccessToken();
+  opts.headers = opts.headers || {};
+  if (token) opts.headers['Authorization'] = 'Bearer ' + token;
+  return $.ajax(opts).fail((xhr) => {
+    if (xhr.status === 401) notify('Auth', 'Unauthorized. Please login.');
+    else notify('Error ' + xhr.status, xhr.responseText || 'Request failed');
+  });
+}
+
+// ===================== STATE =====================
+let CURRENT_SURVEY_ID = null;
+let CURRENT_SELECTED_SECTION_ID = null;
+let CURRENT_EDITING = null; // { tempId, persistedQuestionId|null }
+let TEMP_ID_SEQ = 1;
+
+// ===================== UI HELPERS =====================
+function addSectionCard(section) {
+  const id = section.id || ('temp-sec-' + (TEMP_ID_SEQ++));
+  const card = $(
+    `<div class="section-card" data-section-id="${id}">
+      <div class="section-header">
+        <div class="d-flex align-items-center gap-2">
+          <span class="badge bg-secondary">Section</span>
+          <strong class="section-title"></strong>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-sm btn-outline-primary select-section">Select</button>
+        </div>
+      </div>
+      <div class="text-muted small mb-2">Sort: <span class="section-order">${section.sort_order || 1}</span></div>
+      <div class="droppable" data-section-id="${id}">Drop questions here</div>
+      <div class="questions mt-2"></div>
+    </div>`);
+  card.find('.section-title').text(section.title);
+  $('#sectionsList').append(card);
+  wireDroppable(card.find('.droppable'));
+}
+
+function renderQuestionCard(q) {
+  const card = $(`
+    <div class="card mb-2 question-card pointer" data-type="${q.type}" data-qid="${q.__localId || q.id}" data-order="${q.sort_order||1}" data-required="${!!q.required}" data-sensitive="${!!q.sensitive}" data-constraints='${JSON.stringify(q.constraints||{})}' data-prompt="${(q.prompt||'').replace(/"/g,'&quot;')}">
+      <div class="card-body py-2">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <strong>${q.prompt || '(untitled question)'} </strong>
+            <span class="badge badge-type" data-type="${q.type}">${q.type}</span>
+            <span class="text-muted small">code:</span>
+            <code>${q.code || '—'}</code>
+          </div>
+          <div class="text-muted small">order ${q.sort_order || 1}</div>
+        </div>
+      </div>
+    </div>`);
+  return card;
+}
+
+function refreshSectionSelect() {
+  const $sel = $('#propSection');
+  $sel.empty();
+  $('#sectionsList .section-card').each(function() {
+    const secId = $(this).data('section-id');
+    const title = $(this).find('.section-title').text();
+    if (String(secId).startsWith('temp')) return; // only persisted
+    $sel.append(`<option value="${secId}">${title}</option>`);
+  });
+}
+
+function openQuestionProperties(sectionId, q) {
+  $('#propertiesEmpty').addClass('d-none');
+  $('#questionForm').removeClass('d-none');
+  refreshSectionSelect();
+  if (sectionId) $('#propSection').val(sectionId);
+  $('#propCode').val(q.code || '');
+  $('#propPrompt').val(q.prompt || '');
+  $('#propType').val(q.type || 'text');
+  $('#propOrder').val(q.sort_order || 1);
+  $('#propRequired').prop('checked', !!q.required);
+  $('#propSensitive').prop('checked', !!q.sensitive);
+  // load existing constraints if present; otherwise keep empty editor
+  const existingConstraints = q.constraints || {};
+  $('#propConstraints').val(JSON.stringify(existingConstraints, null, 2));
+  $('#constraintsPreview').text(JSON.stringify(existingConstraints, null, 2));
+  $('#constraintsRows').empty();
+  setOptionsEditorVisibility();
+  loadOptionsIntoEditor(q.options || []);
+  buildConstraintQuickAddByType($('#propType').val());
+  if (existingConstraints && Object.keys(existingConstraints).length) {
+    loadConstraintsIntoEditor(existingConstraints);
+    // select primary constraint key in dropdown if present
+    if (existingConstraints.show_if) {
+      $('#constraintQuickAddSelect').val('show_if');
+    } else if (existingConstraints.required_if) {
+      $('#constraintQuickAddSelect').val('required_if');
+    }
+  }
+  CURRENT_EDITING = q;
+}
+
+function setOptionsEditorVisibility() {
+  const t = $('#propType').val();
+  if (['dropdown','radio','checkbox'].includes(t)) $('#optionsEditor').removeClass('d-none');
+  else $('#optionsEditor').addClass('d-none');
+}
+
+function loadOptionsIntoEditor(options) {
+  const $list = $('#optionsList');
+  $list.empty();
+  (options || []).sort((a,b)=> (a.sort_order||1)-(b.sort_order||1)).forEach(opt => {
+    $list.append(optionRow(opt.label || '', opt.value || '', opt.sort_order || 1));
+  });
+}
+
+function optionRow(label, value, sort) {
+  return $(`
+    <div class="option-row d-flex align-items-center gap-2">
+      <input class="form-control form-control-sm" placeholder="Label" value="${label}">
+      <input class="form-control form-control-sm" placeholder="Value" value="${value}">
+      <input type="number" class="form-control form-control-sm" style="width:90px" placeholder="Order" value="${sort}">
+      <button type="button" class="btn btn-sm btn-outline-danger remove-option">×</button>
+    </div>`);
+}
+
+function collectOptionsFromEditor() {
+  const out = [];
+  $('#optionsList .option-row').each(function(){
+    const $row = $(this);
+    const label = $row.find('input').eq(0).val().trim();
+    const value = $row.find('input').eq(1).val().trim();
+    const sort = parseInt($row.find('input').eq(2).val()||'1', 10);
+    if (label && value) out.push({label, value, sort_order: sort, metadata: {} });
+  });
+  return out;
+}
+
+// ===================== DRAG & DROP =====================
+let DRAG_TYPE = null;
+$('#paletteList .item').on('dragstart', function(e){ DRAG_TYPE = $(this).data('qtype'); });
+$('#paletteList .item').on('dragend', function(e){ DRAG_TYPE = null; });
+
+function wireDroppable($el){
+  $el.on('dragover', function(e){ e.preventDefault(); $(this).addClass('drag-over'); });
+  $el.on('dragleave', function(){ $(this).removeClass('drag-over'); });
+  $el.on('drop', function(e){ e.preventDefault(); $(this).removeClass('drag-over');
+    const sectionId = $(this).data('section-id');
+    if (!CURRENT_SURVEY_ID) { return notify('Survey', 'Create or select a survey first'); }
+    if (String(sectionId).startsWith('temp')) { return notify('Section', 'Persist the section first'); }
+    const stub = { __localId: 'temp-q-' + (TEMP_ID_SEQ++), type: DRAG_TYPE || 'text', code: '', prompt: '', sort_order: 1, required: false, sensitive: false, constraints: {}, options: [] };
+    openQuestionProperties(sectionId, stub);
+  });
+}
+
+// Also support click-to-add (uses currently selected section)
+$('#paletteList .item').on('click', function(){
+  const t = $(this).data('qtype');
+  if (!CURRENT_SELECTED_SECTION_ID) return notify('Section', 'Select a section first');
+  const stub = { __localId: 'temp-q-' + (TEMP_ID_SEQ++), type: t, code: '', prompt: '', sort_order: 1, required: false, sensitive: false, constraints: {}, options: [] };
+  openQuestionProperties(CURRENT_SELECTED_SECTION_ID, stub);
+});
+
+// ===================== AUTH =====================
+$("#loginBtn").on('click', function(){
+  const username = $('#loginUsername').val().trim();
+  const password = $('#loginPassword').val();
+  $.ajax({
+    url: ENDPOINTS.token,
+    method: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({ username, password })
+  }).done((data)=>{
+    setTokens(data.access, data.refresh);
+    notify('Login', 'Authenticated successfully');
+    bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
+    loadSurveyList();
+  }).fail((xhr)=>{ notify('Login failed', xhr.responseText || 'Invalid credentials'); });
+});
+
+$('#logoutBtn').on('click', function(){ clearTokens(); notify('Logout', 'Tokens cleared'); $('#sectionsList').empty(); $('#surveyPicker').empty().append('<option value="">— select —</option>'); CURRENT_SURVEY_ID = null; $('#currentSurveyId').text('—'); });
+
+// On load
+setAuthUI(!!getAccessToken());
+
+// ===================== SURVEY LIST & DETAIL =====================
+function loadSurveyList(orgId) {
+  const params = orgId ? (`?organization_id=${encodeURIComponent(orgId)}`) : '';
+  ajaxWithAuth({ url: ENDPOINTS.surveys + params, method: 'GET' })
+    .done((data)=>{
+      const list = (data && data.results) ? data.results : (data || []);
+      const $sel = $('#surveyPicker');
+      $sel.empty().append('<option value="">— select —</option>');
+      list.forEach(s => { $sel.append(`<option value="${s.id}">${s.title} (#${s.id})</option>`); });
+    });
+}
+
+function renderSurveyDetail(data) {
+  $('#sectionsList').empty();
+  (data.sections||[]).forEach(sec=>{
+    addSectionCard(sec);
+    const $sec = $(`[data-section-id='${sec.id}']`);
+    const $qwrap = $sec.find('.questions');
+    (sec.questions||[]).forEach(q=>{ $qwrap.append(renderQuestionCard(q)); });
+  });
+  refreshSectionSelect();
+}
+
+$('#loadSurveyBtn').on('click', function(){
+  const id = parseInt($('#surveyPicker').val()||'0',10);
+  if (!id) return notify('Survey', 'Please select a survey');
+  CURRENT_SURVEY_ID = id; $('#currentSurveyId').text(id);
+  ajaxWithAuth({ url: ENDPOINTS.surveyDetail(id), method: 'GET' }).done((data)=>{
+    $('#surveyCode').val(data.code);
+    $('#surveyTitle').val(data.title);
+    $('#surveyStatus').val(data.status);
+    renderSurveyDetail(data);
+    notify('Survey', 'Loaded survey #' + id);
+  });
+});
+
+$('#createSurveyBtn').on('click', function(){
+  notify('Survey', 'Creation moved to Surveys page');
+});
+
+// removed Fetch Detail button (redundant with Load)
+
+// ===================== SECTION =====================
+$('#addSectionBtn').on('click', function(){
+  if (!CURRENT_SURVEY_ID) return notify('Survey', 'Create or select a survey first');
+  const title = prompt('Section title', 'New Section');
+  if (!title) return;
+  const sort = $('#sectionsList .section-card').length + 1;
+  const payload = { title, description: '', sort_order: sort };
+  ajaxWithAuth({ url: ENDPOINTS.sections(CURRENT_SURVEY_ID), method: 'POST', contentType: 'application/json', data: JSON.stringify(payload) })
+    .done((res)=>{
+      addSectionCard({ id: res.id, title, sort_order: sort });
+      refreshSectionSelect();
+      // auto-select the new section
+      CURRENT_SELECTED_SECTION_ID = res.id;
+      const $sec = $(`[data-section-id='${res.id}']`);
+      $('#sectionsList .section-card').removeClass('border-primary');
+      $sec.addClass('border-primary');
+      notify('Section', `Created & selected #${res.id}`);
+    });
+});
+
+// select section
+$(document).on('click', '.select-section', function(){
+  const $sec = $(this).closest('.section-card');
+  $('#sectionsList .section-card').removeClass('border-primary');
+  $sec.addClass('border-primary');
+  const id = $sec.data('section-id');
+  if (String(id).startsWith('temp')) return notify('Section', 'Persist the section first');
+  CURRENT_SELECTED_SECTION_ID = id;
+  notify('Section', 'Selected #' + id);
+});
+
+// open props by clicking a question
+$(document).on('click', '.question-card', function(){
+  const qid = $(this).data('qid');
+  const type = $(this).attr('data-type');
+  const code = $(this).find('code').text();
+  const promptTxt = $(this).attr('data-prompt') || $(this).find('strong').text();
+  const sectionId = $(this).closest('.section-card').data('section-id');
+  const sortOrder = parseInt($(this).attr('data-order')||'1',10);
+  const required = ($(this).attr('data-required') === 'true');
+  const sensitive = ($(this).attr('data-sensitive') === 'true');
+  let constraints = {};
+  try { constraints = JSON.parse($(this).attr('data-constraints')||'{}'); } catch(e) {}
+  // Fetch fresh details including options for the selected question
+  if (String(qid).startsWith('temp')) {
+    const stub = { id: qid, type, code, prompt: promptTxt, sort_order: sortOrder, required, sensitive, constraints, options: [] };
+    openQuestionProperties(sectionId, stub);
+  } else {
+    // Use lightweight question detail endpoint
+    ajaxWithAuth({ url: API_BASE + "/api/v1/surveys/questions/" + qid + "/detail/", method:'GET' }).done((found)=>{
+      const opts = (found && found.options) ? found.options.map(o=>({ label:o.label, value:o.value, sort_order:o.sort_order })) : [];
+      const stub = { id: qid, type: found.type || type, code: found.code || code, prompt: found.prompt || promptTxt, sort_order: found.sort_order || sortOrder, required: !!found.required, sensitive: !!found.sensitive, constraints: found.constraints || {}, options: opts };
+      openQuestionProperties(sectionId, stub);
+    });
+  }
+});
+
+// ===================== QUESTION SAVE =====================
+$('#propType').on('change', setOptionsEditorVisibility);
+$('#propType').on('change', function(){ buildConstraintQuickAddByType($(this).val()); });
+$('#addOptionBtn').on('click', ()=> { $('#optionsList').append(optionRow('', '', ($('#optionsList .option-row').length+1))); });
+$(document).on('click', '.remove-option', function(){ $(this).closest('.option-row').remove(); });
+$('#resetFormBtn').on('click', ()=>{ $('#questionForm').addClass('d-none'); $('#propertiesEmpty').removeClass('d-none'); CURRENT_EDITING = null; });
+
+$('#saveQuestionBtn').on('click', function(){
+  if (!CURRENT_EDITING) return;
+  const sectionId = parseInt($('#propSection').val(),10);
+  const payload = {
+    // code is generated by backend
+    prompt: $('#propPrompt').val().trim(),
+    type: $('#propType').val(),
+    required: $('#propRequired').is(':checked'),
+    sensitive: $('#propSensitive').is(':checked'),
+    constraints: safeParseJSON($('#propConstraints').val().trim()) || {},
+    sort_order: parseInt($('#propOrder').val()||'1',10),
+    metadata: {}
+  };
+  if (!payload.prompt) return notify('Validation', 'Prompt is required');
+
+  const isUpdate = !!(CURRENT_EDITING.id && String(CURRENT_EDITING.id).indexOf('temp-') !== 0);
+  if (isUpdate) {
+    ajaxWithAuth({ url: ENDPOINTS.questionUpdate(CURRENT_EDITING.id), method: 'PATCH', contentType: 'application/json', data: JSON.stringify(payload) })
+      .done(()=>{
+        notify('Question', `Updated #${CURRENT_EDITING.id}`);
+        // Save options if any for updates
+        const opts = collectOptionsFromEditor();
+        if (opts.length && ['dropdown','radio','checkbox'].includes(payload.type)) {
+          ajaxWithAuth({ url: ENDPOINTS.options(CURRENT_EDITING.id), method: 'POST', contentType: 'application/json', data: JSON.stringify({ replace: true, options: opts }) })
+            .done(()=> notify('Options', `Saved ${opts.length} option(s)`))
+            .always(()=> { if (CURRENT_SURVEY_ID) ajaxWithAuth({ url: ENDPOINTS.surveyDetail(CURRENT_SURVEY_ID), method: 'GET' }).done(renderSurveyDetail); });
+        } else {
+          if (CURRENT_SURVEY_ID) ajaxWithAuth({ url: ENDPOINTS.surveyDetail(CURRENT_SURVEY_ID), method: 'GET' }).done(renderSurveyDetail);
+        }
+      })
+      .fail((xhr)=>{
+        const msg = (xhr.responseJSON && (xhr.responseJSON.detail || xhr.responseJSON.field)) || xhr.responseText || 'Update failed';
+        notify('Validation', String(msg));
+      });
+  } else {
+    ajaxWithAuth({ url: ENDPOINTS.questions(sectionId), method: 'POST', contentType: 'application/json', data: JSON.stringify(payload) })
+      .done((res)=>{
+        notify('Question', `Created #${res.id}`);
+        const $sec = $(`[data-section-id='${sectionId}']`);
+        $sec.find('.questions').append(renderQuestionCard({ id: res.id, ...payload }));
+        const opts = collectOptionsFromEditor();
+        if (opts.length && ['dropdown','radio','checkbox'].includes(payload.type)) {
+          ajaxWithAuth({ url: ENDPOINTS.options(res.id), method: 'POST', contentType: 'application/json', data: JSON.stringify({ options: opts }) })
+            .done(()=> notify('Options', `Saved ${opts.length} option(s)`))
+            .always(()=> { if (CURRENT_SURVEY_ID) ajaxWithAuth({ url: ENDPOINTS.surveyDetail(CURRENT_SURVEY_ID), method: 'GET' }).done(renderSurveyDetail); });
+        } else {
+          if (CURRENT_SURVEY_ID) ajaxWithAuth({ url: ENDPOINTS.surveyDetail(CURRENT_SURVEY_ID), method: 'GET' }).done(renderSurveyDetail);
+        }
+      })
+      .fail((xhr)=>{
+        const msg = (xhr.responseJSON && (xhr.responseJSON.detail || xhr.responseJSON.field)) || xhr.responseText || 'Create failed';
+        notify('Validation', String(msg));
+      });
+  }
+});
+
+function safeParseJSON(text){
+  try { return JSON.parse(text || '{}'); } catch(e){ notify('JSON', 'Invalid constraints JSON. Using {}'); return {}; }
+}
+
+// ===================== CONSTRAINTS EDITOR =====================
+function constraintRowTemplate(key, type, value) {
+  const id = 'c' + Math.random().toString(36).slice(2, 8);
+  const typeSelect = `
+    <select class="form-select form-select-sm constraint-type" style="width:80px">
+      <option value="string" ${type==='string'?'selected':''}>string</option>
+      <option value="number" ${type==='number'?'selected':''}>number</option>
+      <option value="boolean" ${type==='boolean'?'selected':''}>boolean</option>
+      <option value="array" ${type==='array'?'selected':''}>array</option>
+      <option value="object" ${type==='object'?'selected':''}>object</option>
+    </select>`;
+  if (key === 'pattern') {
+    // Simplified pattern row: string input by default, no value wrapper
+    const row = $(`
+      <div class="d-flex align-items-center gap-2 constraint-row" data-row-id="${id}" data-ckey="pattern">
+        <span class="circle-dot" data-bs-toggle="tooltip" data-bs-placement="top" title="pattern"></span>
+        <input class="form-control form-control-sm constraint-key" value="pattern" style="max-width:120px; display:none;">
+        <input type="text" class="form-control form-control-sm constraint-value-str w-100" placeholder="regex e.g. ^[A-Za-z ]+$" value="${value!==undefined && value!==null ? String(value) : ''}">
+        <button type="button" class="btn btn-sm btn-outline-danger remove-constraint">×</button>
+      </div>`);
+    return row;
+  } else {
+    const base = $(`
+      <div class="d-flex align-items-center gap-2 constraint-row" data-row-id="${id}" data-ckey="${key||''}">
+        <span class="circle-dot" data-bs-toggle="tooltip" data-bs-placement="top" title="${key||'constraint'}"></span>
+        <input class="form-control form-control-sm constraint-key" placeholder="key" value="${key||''}" style="max-width:120px; display:none;">
+        <div class="constraint-value-wrap" style="flex:1"></div>
+        ${typeSelect}
+        <button type="button" class="btn btn-sm btn-outline-danger remove-constraint">×</button>
+      </div>`);
+    renderConstraintValueInput(base, type, value);
+    return base;
+  }
+}
+
+function renderConstraintValueInput($row, type, value) {
+  const $wrap = $row.find('.constraint-value-wrap');
+  $wrap.empty();
+  if (type === 'boolean') {
+    const checked = !!value;
+    $wrap.append(`<div class="form-check form-switch"><input class="form-check-input constraint-value-bool" type="checkbox" ${checked?'checked':''}></div>`);
+  } else if (type === 'number') {
+    $wrap.append(`<input type="number" class="form-control form-control-sm constraint-value-num w-100" value="${value!==undefined && value!==null ? value : ''}" placeholder="number">`);
+  } else if (type === 'array') {
+    const v = Array.isArray(value) ? value.join(', ') : '';
+    $wrap.append(`<input type="text" class="form-control form-control-sm constraint-value-array w-100" placeholder="comma, separated, values" value="${v}">`);
+  } else if (type === 'object') {
+    const v = value ? JSON.stringify(value) : '{}';
+    $wrap.append(`<textarea class="form-control form-control-sm constraint-value-obj w-100" rows="3" placeholder='{"k":"v"}'>${v}</textarea>`);
+  } else {
+    $wrap.append(`<input type="text" class="form-control form-control-sm constraint-value-str w-100" value="${value!==undefined && value!==null ? String(value) : ''}" placeholder="value">`);
+  }
+}
+
+function loadConstraintsIntoEditor(obj) {
+  const $list = $('#constraintsRows');
+  $list.empty();
+  const entries = Object.entries(obj || {});
+  if (!entries.length) {
+    $list.append(constraintRowTemplate('', 'string', ''));
+  } else {
+    entries.forEach(([k,v])=> {
+      if (k === 'required_if' && v && typeof v === 'object') {
+        const d = { question_code: v.question_code || '', operator: v.operator || '==', value: v.value !== undefined ? v.value : '' };
+        $list.append(requiredIfRowTemplate(d));
+      } else if (k === 'show_if' && v && typeof v === 'object') {
+        const d = { question_code: v.question_code || '', operator: v.operator || '==', value: v.value !== undefined ? v.value : '' };
+        $list.append(showIfRowTemplate(d));
+      } else if (k === 'pattern') {
+        const row = constraintRowTemplate('pattern', 'string', v || '');
+        $list.append(row);
+        attachPatternPreset(row, v || '');
+      } else {
+        let type = Array.isArray(v) ? 'array' : (v===null? 'string' : typeof v);
+        if (type === 'object' && v instanceof Date) type = 'string';
+        $list.append(constraintRowTemplate(k, type, v));
+      }
+    });
+  }
+  updateConstraintsFromEditor();
+}
+
+function attachPatternPreset($row, currentPattern) {
+  const presets = [
+    { label: 'custom', value: '' },
+    { label: 'letters (A–Z, a–z)', value: '^[A-Za-z]+$' },
+    { label: 'letters & spaces', value: '^[A-Za-z ]+$' },
+    { label: 'digits (0–9)', value: '^\\d+$' },
+    { label: 'alphanumeric', value: '^[A-Za-z0-9]+$' },
+    { label: 'email (simple)', value: '^[^@\n]+@[^@\n]+\\.[^@\n]+$' },
+    { label: 'URL (simple)', value: '^(https?://).+$' }
+  ];
+  const select = $('<select class="form-select form-select-sm pattern-preset" style="max-width:120px"></select>');
+  presets.forEach(p => select.append(`<option value="${p.value}">${p.label}</option>`));
+  // try select matching preset
+  const match = presets.find(p => p.value === (currentPattern || ''));
+  select.val(match ? match.value : '');
+  // insert before the pattern value input
+  const $val = $row.find('.constraint-value-str');
+  if ($val.length) {
+    $val.before(select);
+  } else {
+    // fallback if structure changes
+    $row.prepend(select);
+  }
+}
+
+function collectConstraintsFromEditor() {
+  const out = {};
+  $('#constraintsRows .constraint-row').each(function(){
+    const $row = $(this);
+    const kind = $row.attr('data-row-kind') || 'generic';
+    if (kind === 'required_if') {
+      const question_code = ($row.find('.rif-code').val()||'').trim();
+      const operator = $row.find('.rif-op').val();
+      const raw = $row.find('.rif-value').val();
+      let value;
+      const asNum = parseFloat(raw);
+      value = isNaN(asNum) ? raw : asNum;
+      if (question_code) {
+        out['required_if'] = { question_code, operator, value };
+      }
+      return;
+    } else if (kind === 'show_if') {
+      const question_code = ($row.find('.sif-code').val()||'').trim();
+      const operator = $row.find('.sif-op').val();
+      const raw = $row.find('.sif-value').val();
+      const value = raw;
+      if (question_code) {
+        out['show_if'] = { question_code, operator, value };
+      }
+      return;
+    }
+    const key = ($row.find('.constraint-key').val()||'').trim();
+    if (!key) return;
+    const type = $row.find('.constraint-type').val();
+    let value;
+    if (type === 'boolean') value = $row.find('.constraint-value-bool').is(':checked');
+    else if (type === 'number') {
+      const num = parseFloat($row.find('.constraint-value-num').val());
+      if (!isNaN(num)) value = num; else return;
+    } else if (type === 'array') {
+      const text = $row.find('.constraint-value-array').val();
+      value = (text||'').split(',').map(s=>s.trim()).filter(Boolean);
+    } else if (type === 'object') {
+      value = safeParseJSON($row.find('.constraint-value-obj').val());
+    } else {
+      value = $row.find('.constraint-value-str').val();
+    }
+    out[key] = value;
+  });
+  return out;
+}
+
+function updateConstraintsFromEditor() {
+  const obj = collectConstraintsFromEditor();
+  const text = JSON.stringify(obj, null, 2);
+  $('#propConstraints').val(text);
+  $('#constraintsPreview').text(text);
+}
+
+$(document).on('change keyup', '#constraintsRows .constraint-key, #constraintsRows .constraint-value-wrap :input', function(){
+  updateConstraintsFromEditor();
+});
+
+$(document).on('change', '#constraintsRows .constraint-type', function(){
+  const $row = $(this).closest('.constraint-row');
+  renderConstraintValueInput($row, $(this).val(), '');
+  updateConstraintsFromEditor();
+});
+
+// Removed free-form add constraint to keep constraints strict and aligned with backend
+
+$(document).on('click', '.remove-constraint', function(){
+  $(this).closest('.constraint-row').remove();
+  updateConstraintsFromEditor();
+});
+
+function buildConstraintQuickAddByType(qType) {
+  const $sel = $('#constraintQuickAddSelect');
+  $sel.empty();
+  const common = [];
+  const byType = {
+    text: [
+      {k:'min_length', t:'number', v:10},
+      {k:'max_length', t:'number', v:200},
+      {k:'pattern', t:'string', v:'^[A-Za-z0-9 ]+$'},
+      {k:'error_message', t:'string', v:'Only alphanumeric characters allowed'}
+    ],
+    number: [
+      {k:'min_value', t:'number', v:0},
+      {k:'max_value', t:'number', v:10},
+      {k:'step', t:'number', v:1}
+    ],
+    date: [
+      {k:'min_date', t:'string', v:''},
+      {k:'max_date', t:'string', v:''}
+    ],
+    dropdown: [
+      {k:'min_selected', t:'number', v:1},
+      {k:'max_selected', t:'number', v:3}
+    ],
+    radio: [
+      {k:'min_selected', t:'number', v:1},
+      {k:'max_selected', t:'number', v:3}
+    ],
+    checkbox: [
+      {k:'min_selected', t:'number', v:1},
+      {k:'max_selected', t:'number', v:3}
+    ]
+  };
+  const logic = [{k:'required_if', t:'logic', v:null}, {k:'show_if', t:'logic', v:null}];
+  const items = [...common, ...(byType[qType]||[]), ...logic];
+  items.forEach(it => {
+    const opt = `<option value="${it.k}" data-type="${it.t}" data-default='${JSON.stringify(it.v)}'>${it.k}</option>`;
+    $sel.append(opt);
+  });
+}
+
+$('#constraintQuickAddBtn').on('click', function(){
+  const $sel = $('#constraintQuickAddSelect');
+  const key = $sel.val();
+  if (!key) return;
+  if (key === 'required_if') {
+    const $row = requiredIfRowTemplate({ question_code:'', operator:'==', value:'' });
+    $('#constraintsRows').append($row);
+    // init tooltip for the new dot
+    const tipEl = $row.find('[data-bs-toggle="tooltip"]')[0];
+    if (tipEl) new bootstrap.Tooltip(tipEl);
+  } else if (key === 'show_if') {
+    const $row = showIfRowTemplate({ question_code:'', operator:'==', value:'' });
+    $('#constraintsRows').append($row);
+  } else if (key === 'pattern') {
+    const row = constraintRowTemplate('pattern', 'string', '');
+    $('#constraintsRows').append(row);
+    attachPatternPreset(row, '');
+  } else {
+    const $opt = $sel.find('option:selected');
+    const type = $opt.attr('data-type');
+    let defVal = $opt.attr('data-default');
+    try { defVal = JSON.parse(defVal); } catch(e) {}
+    $('#constraintsRows').append(constraintRowTemplate(key, type, defVal));
+  }
+  updateConstraintsFromEditor();
+});
+
+function requiredIfRowTemplate(data) {
+  const d = data || { question_code:'', operator:'==', value:'' };
+  const ops = ['=','==','!=','<','<=','>','>='];
+  const opOptions = ops.map(op=>`<option value="${op}" ${d.operator===op?'selected':''}>${op}</option>`).join('');
+  return $(`
+    <div class="d-flex align-items-center gap-2 constraint-row required-if" data-row-kind="required_if">
+      <span class="circle-dot" data-bs-toggle="tooltip" data-bs-placement="top" title="required_if"></span>
+      <input class="form-control form-control-sm rif-code" placeholder="question_code" value="${d.question_code}" style="max-width:120px">
+      <select class="form-select form-select-sm rif-op" style="width:80px">${opOptions}</select>
+      <input class="form-control form-control-sm rif-value" placeholder="value (number or text)" value="${d.value}" style="flex:1">
+      <button type="button" class="btn btn-sm btn-outline-danger remove-constraint">×</button>
+      <input type="hidden" class="constraint-key" value="required_if">
+    </div>`);
+}
+
+function showIfRowTemplate(data) {
+  const d = data || { question_code:'', operator:'==', value:'' };
+  const ops = ['=','==','!=','<','<=','>','>='];
+  const opOptions = ops.map(op=>`<option value="${op}" ${d.operator===op?'selected':''}>${op}</option>`).join('');
+  return $(`
+    <div class="d-flex align-items-center gap-2 constraint-row show-if" data-row-kind="show_if">
+      <span class="circle-dot" data-bs-toggle="tooltip" data-bs-placement="top" title="show_if"></span>
+      <input class="form-control form-control-sm sif-code" placeholder="question_code" value="${d.question_code}" style="max-width:120px">
+      <select class="form-select form-select-sm sif-op" style="width:80px">${opOptions}</select>
+      <input class="form-control form-control-sm sif-value" placeholder="value (number or text)" value="${d.value}" style="flex:1">
+      <button type="button" class="btn btn-sm btn-outline-danger remove-constraint">×</button>
+      <input type="hidden" class="constraint-key" value="show_if">
+    </div>`);
+}
+
+// Auto-convert a generic row to required_if when key matches
+$(document).on('change', '#constraintsRows .constraint-key', function(){
+  const $row = $(this).closest('.constraint-row');
+  const val = ($(this).val()||'').trim();
+  if (val === 'required_if' && ($row.attr('data-row-kind')||'generic') === 'generic') {
+    const $new = requiredIfRowTemplate({ question_code:'', operator:'==', value:'' });
+    $row.replaceWith($new);
+  } else if (val === 'show_if' && ($row.attr('data-row-kind')||'generic') === 'generic') {
+    const $new = showIfRowTemplate({ question_code:'', operator:'==', value:'' });
+    $row.replaceWith($new);
+  }
+  updateConstraintsFromEditor();
+});
+
+// Update preview when required_if inputs change
+$(document).on('change keyup', '#constraintsRows .required-if :input', function(){
+  updateConstraintsFromEditor();
+});
+
+// Update preview when show_if inputs change
+$(document).on('change keyup', '#constraintsRows .show-if :input', function(){
+  updateConstraintsFromEditor();
+});
+
+// Update preview when pattern preset changes
+$(document).on('change', '#constraintsRows .pattern-preset', function(){
+  const val = $(this).val() || '';
+  const $row = $(this).closest('.constraint-row');
+  $row.find('.constraint-value-str').val(val).trigger('keyup');
+});
+
+// When switching tabs into Constraints, ensure preview sync
+$(document).on('shown.bs.tab', 'button[data-bs-target="#tab-constraints"]', function(){
+  updateConstraintsFromEditor();
+  // Re-init tooltips for any new required_if dots
+  const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.forEach(el => new bootstrap.Tooltip(el));
+});
+
+// initial load: if token present, populate survey + org list
+$(function(){ if (getAccessToken()) { loadSurveyList(); initBuilderOrgFilter(); } });
+
+let BUILDER_ORG_FILTER = null;
+function initBuilderOrgFilter(){
+  if (BUILDER_ORG_FILTER) return;
+  BUILDER_ORG_FILTER = new TomSelect('#builderOrgFilter', {
+    valueField: 'id', labelField: 'name', searchField: ['name'],
+    allowEmptyOption: true, placeholder: 'All organizations', preload: true,
+    load: function(query, cb){
+      const url = ENDPOINTS.orgs+`?page=1&page_size=20&search=${encodeURIComponent(query||'')}`;
+      ajaxWithAuth({ url, method:'GET' }).done((data)=>{ cb((data && data.results) ? data.results : (data||[])); }).fail(()=>cb());
+    }
+  });
+  BUILDER_ORG_FILTER.on('change', function(){ const orgId = BUILDER_ORG_FILTER.getValue(); loadSurveyList(orgId||''); });
+}
+
+// Load organizations into the create survey org picker
+function loadOrgList(){
+  ajaxWithAuth({ url: ENDPOINTS.orgs, method:'GET' }).done((data)=>{
+    const list = data || [];
+    if (!window.BUILDER_ORG_SELECT) {
+      window.BUILDER_ORG_SELECT = new TomSelect('#surveyOrgPicker', {
+        valueField: 'id', labelField: 'name', searchField: ['name'], allowEmptyOption: true, placeholder: 'select', options: list
+      });
+    } else {
+      window.BUILDER_ORG_SELECT.clear(); window.BUILDER_ORG_SELECT.clearOptions(); window.BUILDER_ORG_SELECT.addOptions(list); window.BUILDER_ORG_SELECT.refreshOptions(false);
+    }
+  });
+}
+
+$(function(){ if (getAccessToken()) loadOrgList(); });
+
+</script>
+</body>
+</html>

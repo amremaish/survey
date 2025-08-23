@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Survey Runner • Bootstrap 5 + jQuery + JWT</title>
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <!-- jQuery -->
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <!-- Bootstrap JS -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Tom Select -->
+  <link href="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/css/tom-select.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/tom-select@2.4.3/dist/js/tom-select.complete.min.js"></script>
+  <style>
+    body { background:#f7f7fb }
+    .panel { background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+    .q-card { border-left:4px solid #e9ecef }
+    .q-card[data-type="dropdown"]{ border-left-color:#845ef7 }
+    .q-card[data-type="radio"]{ border-left-color:#339af0 }
+    .q-card[data-type="checkbox"]{ border-left-color:#51cf66 }
+    .q-card[data-type="text"]{ border-left-color:#ffa94d }
+    .q-card[data-type="number"]{ border-left-color:#ff6b6b }
+    .q-card[data-type="date"]{ border-left-color:#12b886 }
+    .stepper .step { padding:.5rem .75rem; border-radius:20px; background:#f1f3f5; margin-right:.5rem }
+    .stepper .step.active{ background:#0d6efd; color:#fff }
+  </style>
+  {% csrf_token %}
+</head>
+<body>
+  {% include 'partials/navbar.html' %}
+
+  <main class="container py-4">
+    <!-- Controls -->
+    <div class="panel p-3 mb-3">
+      <div class="row g-3 align-items-end">
+        <div class="col-sm-4">
+          <label class="form-label">Organization</label>
+          <select id="orgPicker"><option value="">— select org —</option></select>
+        </div>
+        <div class="col-sm-4 d-none" id="surveyPickerWrap">
+          <label class="form-label">Survey</label>
+          <select id="surveyPicker"><option value="">— select survey —</option></select>
+        </div>
+        <div class="col-sm-4 d-flex gap-2 align-items-end justify-content-end">
+          <button class="btn btn-primary" id="startSessionBtn">Start / Resume Session</button>
+          <div class="text-muted small">Session: <span id="sessionId">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stepper -->
+    <div class="panel p-3 mb-3 d-none" id="stepperPanel">
+      <div class="d-flex align-items-center stepper" id="stepper"></div>
+    </div>
+
+    <!-- Survey Body -->
+    <div class="panel p-3" id="surveyPanel">
+      <div id="surveyEmpty" class="text-muted">Load a survey, start a session, and the form will appear here.</div>
+      <form id="surveyForm" class="d-none"></form>
+      <div class="d-none mt-3" id="navButtons">
+        <button class="btn btn-outline-secondary" id="prevBtn">Previous</button>
+        <button class="btn btn-outline-primary" id="saveBtn">Save Progress</button>
+        <button class="btn btn-primary" id="nextBtn">Next</button>
+        <button class="btn btn-success d-none" id="submitBtn">Submit</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Login Modal -->
+  <div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Login</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-control" id="loginUsername" placeholder="admin" />
+          </div>
+          <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" />
+          </div>
+          <div class="alert alert-warning small">Your API must expose <code>/api/token/</code>. CORS must allow this origin.</div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button type="button" id="loginBtn" class="btn btn-primary">Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header">
+        <strong class="me-auto" id="toastTitle">Notice</strong>
+        <small class="text-muted" id="toastTime">Just now</small>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body" id="toastBody">Hello!</div>
+    </div>
+  </div>
+
+<script>
+// =============== CONFIG ===============
+const API_BASE = "http://127.0.0.1:8000"; // change for your backend
+const ENDPOINTS = {
+  token: API_BASE + "/api/token/",
+  surveys: API_BASE + "/api/v1/surveys/",
+  surveyDetail: (id) => API_BASE + "/api/v1/surveys/" + id + "/detail/",
+  surveyDetailByCode: (code) => API_BASE + "/api/v1/surveys/code/" + encodeURIComponent(code) + "/detail/",
+  orgs: (page, size, search) => API_BASE + "/api/v1/orgs/?page=" + page + "&page_size=" + size + "&search=" + encodeURIComponent(search||''),
+  // sessions
+  startSession: API_BASE + "/api/v1/sessions/sessions/start/",
+  autosave: (sid) => API_BASE + "/api/v1/sessions/sessions/" + sid + "/autosave/",
+  complete: (sid) => API_BASE + "/api/v1/sessions/sessions/" + sid + "/complete/",
+  // submit
+  submit: API_BASE + "/api/v1/responses/submit/",
+};
+
+// =============== UTIL ===============
+function notify(title, body) { $("#toastTitle").text(title); $("#toastBody").text(body); $("#toastTime").text(new Date().toLocaleTimeString()); new bootstrap.Toast(document.getElementById('toast')).show(); }
+function getToken() { return localStorage.getItem('access'); }
+function setTokens(a,r){ localStorage.setItem('access',a); localStorage.setItem('refresh', r || ''); setAuthUI(true); }
+function clearTokens(){ localStorage.removeItem('access'); localStorage.removeItem('refresh'); setAuthUI(false); }
+function setAuthUI(ok){ if(ok){ $('#authStatus').removeClass('text-warning').addClass('text-success').text('Authenticated'); $('#logoutBtn').removeClass('d-none'); } else { $('#authStatus').removeClass('text-success').addClass('text-warning').text('Not authenticated'); $('#logoutBtn').addClass('d-none'); } }
+function ajaxAuth(opts){ const t=getToken(); opts.headers=opts.headers||{}; if(t) opts.headers['Authorization']='Bearer '+t; return $.ajax(opts).fail((xhr)=>{ if(xhr.status===401) notify('Auth','Unauthorized. Please login.'); else notify('Error '+xhr.status, xhr.responseText || 'Request failed'); }); }
+
+function serializeFormToPayload(){
+  const out = {}; // keys by question code
+  $('[data-qcode]').each(function(){
+    const $el=$(this); const code=$el.data('qcode'); const type=$el.data('qtype');
+    if(type==='checkbox'){ const vals=[]; $el.find('input[type=checkbox]:checked').each(function(){ vals.push($(this).val()); }); out[code]=vals; }
+    else if(type==='radio'){ out[code]=$el.find('input[type=radio]:checked').val() || null; }
+    else if(type==='dropdown'){ out[code]=$el.find('select').val() || null; }
+    else { out[code]=$el.find('input,textarea').val() || null; }
+  });
+  return out;
+}
+
+// =============== STATE ===============
+let SURVEYS = []; // list
+let SURVEY = null; // detail
+let SESSION_ID = null;
+let CURRENT_STEP = 0; // index of section
+let ORG_SELECT = null; // Tom Select instance
+
+// =============== AUTH HANDLERS ===============
+$("#loginBtn").on('click', function(){
+  const username=$('#loginUsername').val().trim();
+  const password=$('#loginPassword').val();
+  $.ajax({ url: ENDPOINTS.token, method:'POST', contentType:'application/json', data: JSON.stringify({username,password}) })
+    .done((data)=>{ setTokens(data.access, data.refresh); notify('Login','Authenticated'); bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide(); if (window.SURVEY_SELECT){ window.SURVEY_SELECT.clear(); window.SURVEY_SELECT.clearOptions(); } loadOrgs(); })
+    .fail((xhr)=> notify('Login failed', xhr.responseText||'Invalid creds'));
+});
+$('#logoutBtn').on('click', function(){ clearTokens(); notify('Logout','Tokens cleared'); resetUI(); });
+setAuthUI(!!getToken()); if(getToken()) loadOrgs();
+
+// =============== LOAD SURVEYS ===============
+function loadSurveyList(){ ajaxAuth({ url: ENDPOINTS.surveys, method:'GET' }).done((data)=>{ const list = (data && data.results) ? data.results : (data||[]); SURVEYS = list; const options = list.map(s=> ({ id: s.id, title: s.title, code: s.code, status: s.status }));
+  if (!window.SURVEY_SELECT) {
+    window.SURVEY_SELECT = new TomSelect('#surveyPicker', {
+      valueField: 'id',
+      labelField: 'title',
+      searchField: ['title','code'],
+      options: options,
+      allowEmptyOption: true,
+      placeholder: 'Select survey',
+      render: {
+        option: function(item, escape){
+          const code = item.code ? `<span class=\"text-muted small ms-2\">(${escape(item.code)})</span>` : '';
+          return `<div class=\"d-flex align-items-center\"><span>${escape(item.title||'')}</span>${code}</div>`;
+        },
+        item: function(item, escape){
+          const code = item.code ? `<span class=\"text-muted small ms-2\">(${escape(item.code)})</span>` : '';
+          return `<div class=\"d-flex align-items-center\"><span>${escape(item.title||'')}</span>${code}</div>`;
+        }
+      }
+    });
+  } else {
+    window.SURVEY_SELECT.clear();
+    window.SURVEY_SELECT.clearOptions();
+    window.SURVEY_SELECT.addOptions(options);
+    window.SURVEY_SELECT.refreshOptions(false);
+  }
+}); }
+
+// Org dropdown: initial page and search (first 10 shown)
+function loadOrgs(){
+  ajaxAuth({ url: ENDPOINTS.orgs(1, 10, ''), method:'GET' })
+    .done((data)=>{
+      const list = data.results || [];
+      const options = (list || []).map(o => ({ id: o.id, name: o.name, logo: o.logo }));
+      if (!ORG_SELECT) {
+        ORG_SELECT = new TomSelect('#orgPicker', {
+          valueField: 'id',
+          labelField: 'name',
+          searchField: ['name'],
+          options: options,
+          allowEmptyOption: true,
+          placeholder: 'Select organization',
+          render: {
+            option: function(item, escape){
+              const logo = item.logo ? `<img src="${escape(item.logo)}" style="height:16px;width:16px;object-fit:cover;border-radius:50%;margin-right:6px">` : '';
+              return `<div class="d-flex align-items-center">${logo}<span>${escape(item.name||'')}</span></div>`;
+            },
+            item: function(item, escape){
+              const logo = item.logo ? `<img src="${escape(item.logo)}" style="height:16px;width:16px;object-fit:cover;border-radius:50%;margin-right:6px">` : '';
+              return `<div class="d-flex align-items-center">${logo}<span>${escape(item.name||'')}</span></div>`;
+            }
+          }
+        });
+      } else {
+        ORG_SELECT.clear();
+        ORG_SELECT.clearOptions();
+        ORG_SELECT.addOptions(options);
+        ORG_SELECT.refreshOptions(false);
+      }
+    })
+    .fail((xhr)=>{ if (xhr && xhr.status===401) notify('Auth','Please login to load organizations.'); });
+}
+$('#orgPicker').on('change', function(){ const orgId=parseInt($(this).val()||'0',10); if(!orgId) { if (window.SURVEY_SELECT) { window.SURVEY_SELECT.clear(); window.SURVEY_SELECT.clearOptions(); } $('#surveyPickerWrap').addClass('d-none'); return; }
+  ajaxAuth({ url: ENDPOINTS.surveys + `?organization_id=${orgId}`, method:'GET' }).done((data)=>{ const list = (data && data.results) ? data.results : (data||[]); const options = list.map(s=> ({ id: s.id, title: s.title, code: s.code, status: s.status }));
+    if (!window.SURVEY_SELECT) {
+      window.SURVEY_SELECT = new TomSelect('#surveyPicker', { valueField:'id', labelField:'title', searchField:['title','code'], options, allowEmptyOption:true, placeholder:'Select survey', render: { option:function(item,escape){ const code=item.code?`<span class=\\"text-muted small ms-2\\">(${escape(item.code)})</span>`:''; return `<div class=\\"d-flex align-items-center\\"><span>${escape(item.title||'')}</span>${code}</div>`; }, item:function(item,escape){ const code=item.code?`<span class=\\"text-muted small ms-2\\">(${escape(item.code)})</span>`:''; return `<div class=\\"d-flex align-items-center\\"><span>${escape(item.title||'')}</span>${code}</div>`; } } });
+    } else {
+      window.SURVEY_SELECT.clear();
+      window.SURVEY_SELECT.clearOptions();
+      window.SURVEY_SELECT.addOptions(options);
+      window.SURVEY_SELECT.refreshOptions(false);
+    }
+    $('#surveyPickerWrap').removeClass('d-none');
+  });
+});
+
+// Load survey details when a survey is selected
+$('#surveyPicker').on('change', function(){ const id=parseInt($(this).val()||'0',10); if(!id){ SURVEY=null; $('#surveyForm').addClass('d-none').empty(); $('#surveyEmpty').removeClass('d-none'); $('#navButtons').addClass('d-none'); $('#stepperPanel').addClass('d-none'); return; } ajaxAuth({ url: ENDPOINTS.surveyDetail(id), method:'GET' }).done((data)=>{ SURVEY=data; renderSurvey(data); }); });
+
+// =============== RENDER SURVEY ===============
+function renderSurvey(data){
+  $('#surveyEmpty').addClass('d-none'); $('#surveyForm').removeClass('d-none').empty(); $('#navButtons').removeClass('d-none'); $('#stepperPanel').removeClass('d-none');
+  // Stepper
+  const $st=$('#stepper').empty(); (data.sections||[]).forEach((sec,i)=>{ $st.append(`<div class="step ${i===0?'active':''}" data-index="${i}">${i+1}. ${sec.title}</div>`); });
+  CURRENT_STEP=0; renderStep();
+}
+
+function renderStep(){ if(!SURVEY) return; const sections=SURVEY.sections||[]; if(!sections.length) return; const sec=sections[CURRENT_STEP]; const $form=$('#surveyForm').empty();
+  // section title
+  $form.append(`<h5 class="mb-3">${sec.title}</h5>`);
+  (sec.questions||[]).forEach(q=>{ $form.append(renderQuestion(q)); });
+  updateNavButtons(); highlightStepper();
+}
+
+function renderQuestion(q){
+  const wrap = $(`<div class="card mb-3 q-card" data-type="${q.type}" data-qcode="${q.code}"><div class="card-body"><label class="form-label">${q.prompt}${q.required? ' <span class=\"text-danger\">*</span>':''}</label><div class="q-input"></div><div class="form-text text-muted small">code: <code>${q.code}</code></div></div></div>`);
+  const $input = wrap.find('.q-input');
+  if(q.type==='text'){ $input.append(`<input type="text" class="form-control" />`); }
+  else if(q.type==='number'){ $input.append(`<input type="number" class="form-control" />`); }
+  else if(q.type==='date'){ $input.append(`<input type="date" class="form-control" />`); }
+  else if(q.type==='dropdown'){
+    const sel=$('<select class="form-select"><option value="">— select —</option></select>');
+    (q.options||[]).forEach(o=> sel.append(`<option value="${o.value}">${o.label}</option>`));
+    $input.append(sel);
+  }
+  else if(q.type==='radio'){
+    const g=$('<div></div>'); (q.options||[]).forEach((o,i)=> g.append(`<div class="form-check"><input class="form-check-input" type="radio" name="${q.code}" id="${q.code}_${i}" value="${o.value}"><label class="form-check-label" for="${q.code}_${i}">${o.label}</label></div>`)); $input.append(g);
+  }
+  else if(q.type==='checkbox'){
+    const g=$('<div></div>'); (q.options||[]).forEach((o,i)=> g.append(`<div class="form-check"><input class="form-check-input" type="checkbox" name="${q.code}" id="${q.code}_${i}" value="${o.value}"><label class="form-check-label" for="${q.code}_${i}">${o.label}</label></div>`)); $input.append(g);
+  }
+  return wrap;
+}
+
+function updateNavButtons(){ const last = (SURVEY.sections||[]).length-1; $('#prevBtn').prop('disabled', CURRENT_STEP===0); $('#nextBtn').toggleClass('d-none', CURRENT_STEP===last); $('#submitBtn').toggleClass('d-none', CURRENT_STEP!==last); }
+function highlightStepper(){ $('#stepper .step').removeClass('active'); $(`#stepper .step:eq(${CURRENT_STEP})`).addClass('active'); }
+
+$('#prevBtn').on('click', function(){ if(CURRENT_STEP>0){ CURRENT_STEP--; renderStep(); } });
+$('#nextBtn').on('click', function(){ CURRENT_STEP++; renderStep(); });
+
+// =============== SESSION FLOW ===============
+function resetUI(){ SURVEY=null; SESSION_ID=null; CURRENT_STEP=0; $('#surveyPicker').val(''); $('#sessionId').text('—'); $('#surveyForm').addClass('d-none').empty(); $('#surveyEmpty').removeClass('d-none'); $('#navButtons').addClass('d-none'); $('#stepperPanel').addClass('d-none'); }
+
+$('#startSessionBtn').on('click', function(){
+  // If user selected a survey but details aren't loaded yet, load it synchronously then proceed
+  if(!SURVEY){
+    const selectedId = parseInt($('#surveyPicker').val()||'0',10);
+    if(selectedId){
+      return ajaxAuth({ url: ENDPOINTS.surveyDetail(selectedId), method:'GET' }).done((data)=>{ SURVEY=data; renderSurvey(data); $('#startSessionBtn').trigger('click'); });
+    }
+    return notify('Session','Load a survey first');
+  }
+  const orgId = parseInt(((ORG_SELECT && ORG_SELECT.getValue()) || $('#orgPicker').val() || '0'), 10) || null;
+  ajaxAuth({ url: ENDPOINTS.startSession, method:'POST', contentType:'application/json', data: JSON.stringify({ survey_id: SURVEY.id, organization_id: orgId }) })
+    .done((data)=>{ SESSION_ID = data.id; $('#sessionId').text(SESSION_ID); notify('Session','Started #' + SESSION_ID); })
+});
+
+// Save progress (autosave)
+$('#saveBtn').on('click', function(){ if(!SESSION_ID) return notify('Session','Start a session first'); const payload = { partial_payload: serializeFormToPayload() }; ajaxAuth({ url: ENDPOINTS.autosave(SESSION_ID), method:'PATCH', contentType:'application/json', data: JSON.stringify(payload) }).done(()=> notify('Draft','Saved')); });
+
+// Submit
+$('#submitBtn').on('click', function(){ const draft = serializeFormToPayload();
+  if (SESSION_ID) {
+    ajaxAuth({ url: ENDPOINTS.complete(SESSION_ID), method:'POST', contentType:'application/json', data: JSON.stringify({}) })
+      .done(()=>{
+        ajaxAuth({ url: ENDPOINTS.submit, method:'POST', contentType:'application/json', data: JSON.stringify({ session_id: SESSION_ID, answers: draft }) })
+          .done((resp)=>{ notify('Submitted', 'Response #' + resp.id + ' saved'); })
+          .fail((xhr)=> notify('Submit failed', xhr.responseText||'Error')); })
+      .fail((xhr)=> notify('Complete failed', xhr.responseText||'Error'));
+  } else if (SURVEY) {
+    // Anonymous direct submit without auth
+    $.ajax({ url: ENDPOINTS.submit, method:'POST', contentType:'application/json', data: JSON.stringify({ survey_id: SURVEY.id, answers: draft }) })
+      .done((resp)=>{ notify('Submitted', 'Response #' + resp.id + ' saved'); })
+      .fail((xhr)=> notify('Submit failed', xhr.responseText||'Error'));
+  } else {
+    notify('Submit', 'Load a survey first');
+  }
+});
+
+</script>
+</body>
+</html>

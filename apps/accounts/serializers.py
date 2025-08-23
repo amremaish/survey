@@ -1,27 +1,31 @@
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from .models import Organization, OrganizationUser
-
-User = get_user_model()
+from django.contrib.auth.models import User
+from .models import Organization, OrganizationMember
 
 class OrganizationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ["id", "name", "metadata", "created_at", "updated_at"]
+        fields = ["id", "name", "industry", "contact_email", "phone", "logo", "created_at", "updated_at"]
 
 class OrganizationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Organization
-        fields = ["name", "metadata"]
+        fields = ["name", "industry", "contact_email", "phone", "logo"]
 
-class OrganizationUserSerializer(serializers.ModelSerializer):
+# Members serialization removed
+
+
+class UserBriefSerializer(serializers.ModelSerializer):
     class Meta:
-        model = OrganizationUser
-        fields = ["id", "organization", "user", "is_owner", "created_at", "updated_at"]
+        model = User
+        fields = ["id", "username", "email"]
 
-class AddUserToOrgSerializer(serializers.Serializer):
-    user_id = serializers.IntegerField()
-    is_owner = serializers.BooleanField(required=False, default=False)
-    group_names = serializers.ListField(
-        child=serializers.CharField(), required=False, default=list
-    )
+
+class OrgMemberSerializer(serializers.ModelSerializer):
+    user = UserBriefSerializer(read_only=True)
+    user_id = serializers.IntegerField(write_only=True, required=True)
+
+    class Meta:
+        model = OrganizationMember
+        fields = ["id", "organization", "user", "user_id", "created_at"]
+        read_only_fields = ["id", "organization", "user", "created_at"]

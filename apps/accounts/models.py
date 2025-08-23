@@ -1,27 +1,31 @@
 from django.db import models
-from django.contrib.auth import get_user_model
 from apps.core.models import TimeStampedModel
-
-User = get_user_model()
+from uuid import uuid4
+import os
+from django.contrib.auth.models import User
 
 class Organization(TimeStampedModel):
     name = models.CharField(max_length=255, unique=True)
-    metadata = models.JSONField(default=dict)
+    industry = models.CharField(max_length=255, blank=True, null=True)
+    contact_email = models.EmailField(blank=True, null=True)
+    phone = models.CharField(max_length=64, blank=True, null=True)
+    def _logo_upload_path(instance, filename):
+        base, ext = os.path.splitext(filename or "")
+        ext = ext or ".png"
+        return f"org_logos/{uuid4().hex}{ext}"
+
+    logo = models.ImageField(upload_to=_logo_upload_path, blank=True, null=True)
 
     def __str__(self):
         return self.name
 
-class OrganizationUser(TimeStampedModel):
-    organization = models.ForeignKey(
-        Organization, on_delete=models.CASCADE, related_name="org_users"
-    )
-    user = models.ForeignKey(
-        User, on_delete=models.CASCADE, related_name="user_orgs"
-    )
-    is_owner = models.BooleanField(default=False)
+
+class OrganizationMember(TimeStampedModel):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="members")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="org_memberships")
 
     class Meta:
         unique_together = ("organization", "user")
 
     def __str__(self):
-        return f"{self.user_id} @ {self.organization_id}"
+        return f"org#{self.organization_id}:user#{self.user_id}"

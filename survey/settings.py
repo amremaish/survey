@@ -16,6 +16,21 @@ import os
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+"""Load .env file if present (no extra dependency)"""
+ENV_FILE = BASE_DIR / ".env"
+if ENV_FILE.exists():
+    try:
+        with open(ENV_FILE, "r", encoding="utf-8") as _envf:
+            for _line in _envf:
+                _line = _line.strip()
+                if not _line or _line.startswith("#"):
+                    continue
+                if "=" not in _line:
+                    continue
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+    except Exception:
+        pass
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -39,6 +54,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     "rest_framework",
+    "corsheaders",
     "apps.core",
     "apps.accounts",
     "apps.surveys",
@@ -60,7 +76,7 @@ REST_FRAMEWORK = {
 # sensible JWT defaults; tweak as you wish
 from datetime import timedelta
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
+    "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,          # requires blacklist app if you also set BLACKLIST_AFTER_ROTATION
     "BLACKLIST_AFTER_ROTATION": True,       # set True only if token_blacklist in INSTALLED_APPS + migrated
@@ -70,6 +86,7 @@ SIMPLE_JWT = {
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -157,8 +174,60 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# CORS
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept', 'accept-encoding', 'authorization', 'content-type', 'dnt', 'origin', 'user-agent', 'x-csrftoken', 'x-requested-with'
+]
+
+CELERY_BEAT_SCHEDULE = {
+    "mark-expired-invitations-every-5-min": {
+        "task": "apps.surveys.tasks.mark_expired_invitations_task",
+        "schedule": 300.0,
+        "args": (200,),
+    }
+}
+
+
+# Allow all origins (overrides CORS_ALLOWED_ORIGINS)
+CORS_ALLOW_ALL_ORIGINS = True
+
+# Responses app encryption secret (Fernet derived). Set in environment for production.
+# Example: RESPONSES_ENCRYPTION_SECRET=base64randomoranyrandomstring
+RESPONSES_ENCRYPTION_SECRET = os.getenv('RESPONSES_ENCRYPTION_SECRET')
+
+# SMTP / Email settings (load from .env)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '587'))
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', '1') == '1'
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', EMAIL_HOST_USER or 'no-reply@example.com')
+
+# Celery (broker URL via env, e.g., redis://127.0.0.1:6379/0)
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'redis://127.0.0.1:6379/0')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', CELERY_BROKER_URL)
+# Enable eager (synchronous) task execution in development if desired
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_EAGER', '0') == '1'
+CELERY_TASK_EAGER_PROPAGATES = True
+
+# Public base URL for links in emails (set to your deployment domain)
+SITE_URL = os.getenv('SITE_URL', 'http://localhost:8000')

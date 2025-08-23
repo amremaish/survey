@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Organization Users</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    body { background:#f7f7fb }
+  </style>
+</head>
+<body>
+{% include 'partials/navbar.html' %}
+<main class="container py-4">
+  <div class="card mb-3">
+    <div class="card-body d-flex align-items-center gap-2">
+      <a href="/orgs/" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left"></i> Back</a>
+      <div class="ms-2">
+        <h5 class="mb-0" id="orgTitle">Organization #{{ org_id }}</h5>
+        <div class="text-muted small" id="orgSubtitle">Manage users for this organization</div>
+      </div>
+      <div class="ms-auto d-flex align-items-center gap-2">
+        <div class="input-group input-group-sm" style="min-width:420px; max-width:560px">
+          <span class="input-group-text"><i class="bi bi-search"></i></span>
+          <input type="text" class="form-control" id="filterBox" placeholder="username or email">
+        </div>
+        <button class="btn btn-primary btn-sm px-3" id="newUserBtn"><i class="bi bi-person-plus"></i> Add User</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead class="table-light">
+          <tr><th style="width:80px">ID</th><th>Username</th><th>Email</th><th style="width:160px">Actions</th></tr>
+        </thead>
+        <tbody id="usersTable"></tbody>
+      </table>
+    </div>
+    <div class="card-footer d-flex justify-content-between align-items-center">
+      <div id="usersCount" class="text-muted small">0 users</div>
+      <div class="d-flex align-items-center gap-2">
+        <div class="input-group input-group-sm" style="width:120px">
+          <span class="input-group-text">Page</span>
+          <input class="form-control" id="pageDisplay" value="1" readonly>
+        </div>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary" id="prevBtn"><i class="bi bi-chevron-left"></i> Prev</button>
+          <button class="btn btn-outline-secondary" id="nextBtn">Next <i class="bi bi-chevron-right"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <div class="modal fade" id="userModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title">Add User</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <div class="alert alert-info small">Provide credentials to create a new user and link them to this organization.</div>
+          <div class="row g-2">
+            <div class="col-sm-6"><label class="form-label">Username</label><input class="form-control" id="uUsername" placeholder="new username"></div>
+            <div class="col-sm-6"><label class="form-label">Email</label><input type="email" class="form-control" id="uEmail" placeholder="optional"></div>
+            <div class="col-sm-6"><label class="form-label">Password</label><input type="password" class="form-control" id="uPassword" placeholder="for new user"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" id="saveUserBtn">Save</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index:1080">
+    <div id="toast" class="toast" role="alert"><div class="toast-header"><strong class="me-auto" id="toastTitle">Notice</strong><button class="btn-close" data-bs-dismiss="toast"></button></div><div class="toast-body" id="toastBody">Hello</div></div>
+  </div>
+</main>
+
+<script>
+const ORG_ID = {{ org_id }};
+const API_BASE = "http://localhost:8000";
+const ENDPOINTS = {
+  orgDetail: (orgId) => API_BASE + "/api/v1/orgs/" + orgId + "/",
+  members: (orgId) => API_BASE + "/api/v1/orgs/" + orgId + "/members/",
+  memberDetail: (orgId, memberId) => API_BASE + "/api/v1/orgs/" + orgId + "/members/" + memberId + "/",
+};
+
+function notify(title, body){ $('#toastTitle').text(title); $('#toastBody').text(body); new bootstrap.Toast('#toast').show(); }
+function getToken(){ return localStorage.getItem('access'); }
+function ajaxAuth(opts){ const t=getToken(); opts.headers=opts.headers||{}; if(t) opts.headers['Authorization']='Bearer '+t; return $.ajax(opts).fail((xhr)=>{ if(xhr.status===401) notify('Auth','Unauthorized'); else notify('Error '+xhr.status, xhr.responseText||'Request failed'); }); }
+
+let USERS_CACHE = [];
+let FILTERED = [];
+let PAGE = 1;
+const PAGE_SIZE = 10;
+function renderUsers(list){
+  const $t=$('#usersTable').empty();
+  if(!list || list.length===0){
+    $t.append('<tr><td colspan="4" class="text-center text-muted py-4">No users yet. Click "Add User" to get started.</td></tr>');
+    return;
+  }
+  list.forEach(m=>{ $t.append(`<tr data-id="${m.id}"><td>${m.user.id}</td><td>${m.user.username}</td><td>${m.user.email||''}</td><td class="text-end"><div class="btn-group btn-group-sm"><button class="btn btn-outline-danger delUser"><i class="bi bi-trash"></i> Delete</button></div></td></tr>`); });
+}
+function loadUsers(){
+  const search = ($('#filterBox').val()||'').trim();
+  const params = `?page=${PAGE}&page_size=${PAGE_SIZE}&search=${encodeURIComponent(search)}`;
+  ajaxAuth({ url: ENDPOINTS.members(ORG_ID) + params, method:'GET' }).done((resp)=>{
+    // When backend pagination is available, prefer it for counts; else fallback to client
+    if (resp && Array.isArray(resp.results)) {
+      USERS_CACHE = resp.results;
+      FILTERED = resp.results;
+      // Count reflects server-side total
+      const total = resp.count || resp.results.length;
+      $('#usersCount').text(`${total} user${total===1?'':'s'}`);
+      renderUsers(resp.results);
+      // prev/next enabling based on count
+      const end = PAGE*PAGE_SIZE;
+      $('#prevBtn').prop('disabled', PAGE<=1);
+      $('#nextBtn').prop('disabled', end>=total);
+      $('#pageDisplay').val(PAGE);
+    } else {
+      USERS_CACHE = resp || [];
+      applyFilter();
+    }
+  });
+}
+function applyFilter(){ const q = ($('#filterBox').val()||'').toLowerCase(); FILTERED = !q ? USERS_CACHE.slice() : USERS_CACHE.filter(m => (m.user.username||'').toLowerCase().includes(q) || (m.user.email||'').toLowerCase().includes(q)); PAGE = 1; renderPage(); }
+function renderPage(){ const total = FILTERED.length; const start = (PAGE-1)*PAGE_SIZE; const end = start + PAGE_SIZE; const slice = FILTERED.slice(start, end); renderUsers(slice); $('#usersCount').text(`${total} user${total===1?'':'s'}`); $('#prevBtn').prop('disabled', PAGE<=1); $('#nextBtn').prop('disabled', end>=total); $('#pageDisplay').val(PAGE); }
+
+$('#newUserBtn').on('click', function(){ $('#uUsername').val(''); $('#uEmail').val(''); $('#uPassword').val(''); new bootstrap.Modal('#userModal').show(); });
+$('#saveUserBtn').on('click', function(){
+  const username=$('#uUsername').val().trim();
+  const email=$('#uEmail').val().trim();
+  const password=$('#uPassword').val();
+  if(!username || !password) return notify('Validation','Username and password are required.');
+  const payload = { username, email, password };
+  ajaxAuth({ url: ENDPOINTS.members(ORG_ID), method:'POST', contentType:'application/json', data: JSON.stringify(payload) })
+    .done(()=>{ notify('Users','Saved'); loadUsers(); try{ bootstrap.Modal.getInstance(document.getElementById('userModal')).hide(); }catch(e){} })
+});
+$(document).on('click', '.delUser', function(){ const id=$(this).closest('tr').data('id'); if(!confirm('Remove member #'+id+' ?')) return; ajaxAuth({ url: ENDPOINTS.memberDetail(ORG_ID, id), method:'DELETE' }).done(()=>{ notify('Users','Removed'); loadUsers(); }); });
+
+$('#filterBox').on('input', function(){ clearTimeout(window._filtTimer); window._filtTimer = setTimeout(function(){ PAGE=1; loadUsers(); }, 250); });
+$('#prevBtn').on('click', function(){ if(PAGE>1){ PAGE--; loadUsers(); } });
+$('#nextBtn').on('click', function(){ PAGE++; loadUsers(); });
+$(function(){
+  // Load org name
+  ajaxAuth({ url: ENDPOINTS.orgDetail(ORG_ID), method:'GET' }).done((org)=>{ if(org && org.name){ $('#orgTitle').text('Organization: ' + org.name); } });
+  loadUsers();
+});
+</script>
+</body>
+</html>
+
+

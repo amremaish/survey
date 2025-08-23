@@ -1,0 +1,44 @@
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm sticky-top">
+  <div class="container-fluid">
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="12" r="10" opacity=".25"/><path d="M7 13h10v2H7zm0-4h10v2H7z"/></svg>
+      <strong>Survey Suite</strong>
+    </a>
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+        <li class="nav-item"><a class="nav-link" href="/">Builder</a></li>
+        <li class="nav-item"><a class="nav-link" href="/run/">Runner</a></li>
+        <li class="nav-item"><a class="nav-link" href="/orgs/">Organizations</a></li>
+        <li class="nav-item"><a class="nav-link" href="/surveys/">Surveys</a></li>
+      </ul>
+
+      <div class="d-flex align-items-center gap-2">
+        <span id="authStatus" class="navbar-text text-warning small me-1">Not authenticated</span>
+        <button class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#loginModal">Login</button>
+        <button id="logoutBtn" class="btn btn-outline-light btn-sm d-none">Logout</button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<script>
+// highlight active link
+(function(){
+  try {
+    var path = window.location.pathname || '/';
+    document.querySelectorAll('.navbar .nav-link').forEach(function(a){
+      var href = a.getAttribute('href') || '';
+      if (!href) return;
+      if (href !== '/' && path.startsWith(href)) { a.classList.add('active'); }
+      if (href === '/' && path === '/') { a.classList.add('active'); }
+    });
+  } catch (e) {}
+})();
+</script>
+
+

@@ -1,26 +1,48 @@
-from django.contrib.auth.models import Group
 from django.shortcuts import get_object_or_404
+from django.db.models import Q
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
-from django.contrib.auth import get_user_model
 
-from .models import Organization, OrganizationUser
+from django.contrib.auth.models import User
+from django.db.models import Q
+from apps.core.utility import parse_int as _parse_int, page_bounds as _page_bounds
+from .models import Organization, OrganizationMember
 from .serializers import (
     OrganizationSerializer,
     OrganizationCreateSerializer,
-    OrganizationUserSerializer,
-    AddUserToOrgSerializer,
+    OrgMemberSerializer,
 )
-
-User = get_user_model()
 
 class OrganizationListCreateView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
         qs = Organization.objects.all().order_by("id")
-        return Response(OrganizationSerializer(qs, many=True).data)
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            qs = qs.filter(
+                Q(name__icontains=search)
+                | Q(industry__icontains=search)
+                | Q(contact_email__icontains=search)
+                | Q(phone__icontains=search)
+            )
+
+        try:
+            page = max(1, int(request.query_params.get("page", 1)))
+        except ValueError:
+            page = 1
+        try:
+            page_size = max(1, min(100, int(request.query_params.get("page_size", 10))))
+        except ValueError:
+            page_size = 10
+
+        count = qs.count()
+        start = (page - 1) * page_size
+        end = start + page_size
+        items = qs[start:end]
+        data = OrganizationSerializer(items, many=True).data
+        return Response({"count": count, "results": data})
 
     def post(self, request):
         serializer = OrganizationCreateSerializer(data=request.data)
@@ -28,31 +50,71 @@ class OrganizationListCreateView(APIView):
         org = serializer.save()
         return Response(OrganizationSerializer(org).data, status=status.HTTP_201_CREATED)
 
-class OrganizationAddUserView(APIView):
+class OrganizationDetailView(APIView):
     permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, org_id: int):
+        org = get_object_or_404(Organization, pk=org_id)
+        return Response(OrganizationSerializer(org).data)
+
+    def patch(self, request, org_id: int):
+        org = get_object_or_404(Organization, pk=org_id)
+        # Allow partial updates of non-unique fields without requiring name change
+        serializer = OrganizationCreateSerializer(org, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        org = serializer.save()
+        return Response(OrganizationSerializer(org).data)
+
+    def delete(self, request, org_id: int):
+        org = get_object_or_404(Organization, pk=org_id)
+        org.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+class OrgMembersView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, org_id: int):
+        org = get_object_or_404(Organization, pk=org_id)
+        qs = OrganizationMember.objects.filter(organization=org).select_related("user").order_by("id")
+
+        search = (request.query_params.get("search") or "").strip()
+        if search:
+            qs = qs.filter(Q(user__username__icontains=search) | Q(user__email__icontains=search))
+
+        page = _parse_int(request.query_params.get("page", 1), 1)
+        page_size = _parse_int(request.query_params.get("page_size", 10), 10)
+        start, end = _page_bounds(page, page_size)
+
+        count = qs.count()
+        items = qs[start:end]
+        data = OrgMemberSerializer(items, many=True).data
+        return Response({"count": count, "results": data})
 
     def post(self, request, org_id: int):
         org = get_object_or_404(Organization, pk=org_id)
-        payload = AddUserToOrgSerializer(data=request.data)
-        payload.is_valid(raise_exception=True)
+        # create user if username/email/password provided; else expect user_id
+        user_id = request.data.get("user_id")
+        username = (request.data.get("username") or "").strip()
+        email = (request.data.get("email") or "").strip()
+        password = request.data.get("password")
+        if user_id:
+            user = get_object_or_404(User, pk=int(user_id))
+        else:
+            if not username or not password:
+                return Response({"detail": "username and password are required"}, status=status.HTTP_400_BAD_REQUEST)
+            if User.objects.filter(username=username).exists():
+                return Response({"detail": "username already exists"}, status=status.HTTP_400_BAD_REQUEST)
+            user = User.objects.create_user(username=username, email=email or None, password=password)
+        # link
+        OrganizationMember.objects.get_or_create(organization=org, user=user)
+        members = OrganizationMember.objects.filter(organization=org).select_related("user").order_by("id")
+        return Response(OrgMemberSerializer(members, many=True).data, status=status.HTTP_201_CREATED)
 
-        user = get_object_or_404(User, pk=payload.validated_data["user_id"])
-        is_owner = payload.validated_data.get("is_owner", False)
-        group_names = payload.validated_data.get("group_names", [])
+class OrgMemberDetailView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
 
-        link, _ = OrganizationUser.objects.get_or_create(
-            organization=org, user=user, defaults={"is_owner": is_owner}
-        )
-        if not _:
-            # existing link: allow toggling owner flag
-            if link.is_owner != is_owner:
-                link.is_owner = is_owner
-                link.save()
-
-        # optional: attach built-in Group(s) by name
-        if group_names:
-            for gname in group_names:
-                grp, _ = Group.objects.get_or_create(name=gname)
-                user.groups.add(grp)
-
-        return Response(OrganizationUserSerializer(link).data, status=status.HTTP_201_CREATED)
+    def delete(self, request, org_id: int, member_id: int):
+        org = get_object_or_404(Organization, pk=org_id)
+        m = get_object_or_404(OrganizationMember, pk=member_id, organization=org)
+        m.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)

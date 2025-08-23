@@ -1,5 +1,6 @@
 from django.db import models
 from apps.core.models import TimeStampedModel
+from apps.accounts.models import Organization
 
 class SurveyStatus(models.TextChoices):
     DRAFT = "draft", "Draft"
@@ -7,22 +8,19 @@ class SurveyStatus(models.TextChoices):
     ARCHIVED = "archived", "Archived"
 
 class Survey(TimeStampedModel):
-    # int PK via DEFAULT_AUTO_FIELD
-    code = models.SlugField(max_length=128)
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="surveys")
+    code = models.SlugField(max_length=128, unique=True)
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True, null=True)
     status = models.CharField(max_length=16, choices=SurveyStatus.choices, default=SurveyStatus.DRAFT)
-    version = models.IntegerField(default=1)
-    settings = models.JSONField(default=dict)
 
     class Meta:
-        unique_together = ("code", "version")
         indexes = [
             models.Index(fields=["status"]),
         ]
 
     def __str__(self):
-        return f"{self.code}@v{self.version}"
+        return f"{self.code}"
 
 class SurveySection(TimeStampedModel):
     survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name="sections")
@@ -75,26 +73,29 @@ class SurveyQuestionOption(TimeStampedModel):
         unique_together = ("question", "sort_order")
         ordering = ["sort_order"]
 
-class QuestionDependency(TimeStampedModel):
-    """Q_dep depends on Q_src. 'rule' holds JSON describing allowed options/visibility/filtering."""
-    question = models.ForeignKey(SurveyQuestion, on_delete=models.CASCADE, related_name="dependencies")  # dependent
-    depends_on = models.ForeignKey(SurveyQuestion, on_delete=models.CASCADE, related_name="dependents")   # source
-    rule = models.JSONField()  # e.g. {"if": {"Q1": "eg"}, "options": ["Cairo","Alex"]}
 
-class LogicScope(models.TextChoices):
-    SECTION = "section", "Section"
-    QUESTION = "question", "Question"
+class InvitationStatus(models.TextChoices):
+    PENDING = "pending", "Pending"
+    SUBMITTED = "submitted", "Submitted"
+    EXPIRED = "expired", "Expired"
 
-class LogicEffect(models.TextChoices):
-    SHOW = "show", "Show"
-    HIDE = "hide", "Hide"
-    ENABLE = "enable", "Enable"
-    DISABLE = "disable", "Disable"
-    REQUIRE = "require", "Require"
 
-class LogicRule(TimeStampedModel):
-    survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name="logic_rules")
-    scope = models.CharField(max_length=16, choices=LogicScope.choices)
-    target_id = models.IntegerField()           # id of SurveySection or SurveyQuestion (int PKs)
-    effect = models.CharField(max_length=16, choices=LogicEffect.choices)
-    condition = models.JSONField()              # JSON logic object
+class SurveyInvitation(TimeStampedModel):
+    organization = models.ForeignKey(Organization, on_delete=models.CASCADE, related_name="invitations")
+    survey = models.ForeignKey(Survey, on_delete=models.CASCADE, related_name="invitations")
+    email = models.EmailField()
+    token = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    status = models.CharField(max_length=16, choices=InvitationStatus.choices, default=InvitationStatus.PENDING)
+    response_id = models.IntegerField(blank=True, null=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["survey", "status"], name="idx_inv_survey_status"),
+            models.Index(fields=["token"], name="idx_inv_token"),
+        ]
+
+    def __str__(self):
+        return f"inv:{self.email} -> {self.survey_id} ({self.status})"
+
+

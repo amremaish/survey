@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.conf import settings
+from django.conf.urls.static import static
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
@@ -7,6 +9,7 @@ from rest_framework_simplejwt.views import (
 )
 
 urlpatterns = [
+    path("", include("apps.core.urls")),
     path("admin/", admin.site.urls),
 
     # JWT endpoints
@@ -20,3 +23,6 @@ urlpatterns = [
     path("api/v1/responses/", include("apps.responses.urls")),
     path("api/v1/", include("apps.accounts.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

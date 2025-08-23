@@ -1,0 +1,361 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Organization Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <style> body { background:#f7f7fb } </style>
+</head>
+<body>
+<header class="orgbar py-2">
+  <div class="container d-flex align-items-center justify-content-between">
+    <div class="d-flex align-items-center gap-2">
+      <img id="orgLogo" src="" alt="logo" class="rounded" style="width:32px;height:32px;object-fit:cover;display:none;">
+      <div class="text-white">
+        <div class="fw-semibold" id="orgTitle">Organization #{{ org_id }}</div>
+        <div class="small opacity-75">Submitted survey responses</div>
+      </div>
+    </div>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-sm btn-outline-light d-none" id="logoutBtn"><i class="bi bi-box-arrow-right"></i> Logout</button>
+      <button class="btn btn-sm btn-light" id="loginBtnTop"><i class="bi bi-box-arrow-in-right"></i> Login</button>
+    </div>
+  </div>
+</header>
+<main class="container py-4">
+  <ul class="nav nav-tabs mb-3" id="dashTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="tab-answers-tab" data-bs-toggle="tab" data-bs-target="#tab-answers" type="button" role="tab">Survey Answers</button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="tab-surveys-tab" data-bs-toggle="tab" data-bs-target="#tab-surveys" type="button" role="tab">Surveys</button>
+    </li>
+  </ul>
+
+  <div class="tab-content">
+    <div class="tab-pane fade show active" id="tab-answers" role="tabpanel">
+      <div class="card mb-3">
+        <div class="card-body">
+          <div class="input-group input-group-sm">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input id="searchBox" class="form-control" placeholder="Search by survey title or code">
+          </div>
+        </div>
+      </div>
+      <div class="row g-3" id="cardsRow"></div>
+      <div class="card mt-3">
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <div id="countLabel" class="text-muted small">0 results</div>
+          <div class="d-flex align-items-center gap-2">
+            <div class="input-group input-group-sm" style="width:120px">
+              <span class="input-group-text">Page</span>
+              <input class="form-control" id="pageDisplay" value="1" readonly>
+            </div>
+            <div class="btn-group btn-group-sm">
+              <button class="btn btn-outline-secondary" id="prevBtn"><i class="bi bi-chevron-left"></i> Prev</button>
+              <button class="btn btn-outline-secondary" id="nextBtn">Next <i class="bi bi-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-pane fade" id="tab-surveys" role="tabpanel">
+      <div class="card mb-3">
+        <div class="card-body d-flex align-items-center gap-2">
+          <div class="input-group input-group-sm" style="max-width:420px">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input id="survSearch" class="form-control" placeholder="Filter surveys">
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead class="table-light">
+              <tr><th style="width:80px">ID</th><th>Title</th><th>Code</th><th>Status</th><th style="width:240px">Actions</th></tr>
+            </thead>
+            <tbody id="surveysTable"></tbody>
+          </table>
+        </div>
+        <div class="card-footer d-flex justify-content-between align-items-center">
+          <div id="survCount" class="text-muted small">0 surveys</div>
+          <div class="btn-group btn-group-sm">
+            <button class="btn btn-outline-secondary" id="sPrev">Prev</button>
+            <button class="btn btn-outline-secondary" id="sNext">Next</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-3" id="cardsRow"></div>
+
+</main>
+
+<div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Login</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label">Username</label><input class="form-control" id="loginUsername" placeholder="username"></div>
+        <div class="mb-2"><label class="form-label">Password</label><input type="password" class="form-control" id="loginPassword" placeholder="••••••••"></div>
+        <div class="alert alert-info small mb-0">Only members of this organization can access its dashboard.</div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" id="loginBtn">Login</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const ORG_ID = {{ org_id }};
+const API_BASE = "http://localhost:8000";
+const ENDPOINTS = {
+  dashboard: (orgId) => API_BASE + "/api/v1/responses/org/" + orgId + "/dashboard/",
+  orgDetail: (orgId) => API_BASE + "/api/v1/orgs/" + orgId + "/",
+  token: API_BASE + "/api/token/",
+  orgSurveys: (orgId, page, size, search) => API_BASE + "/api/v1/surveys/?organization_id=" + orgId + "&page=" + page + "&page_size=" + size + "&search=" + encodeURIComponent(search||''),
+};
+
+function notify(title, body){ /* optional toast hook */ }
+function getToken(){ return localStorage.getItem('access'); }
+function setTokens(a,r){ localStorage.setItem('access',a); localStorage.setItem('refresh',r||''); $('#logoutBtn').removeClass('d-none'); $('#loginBtnTop').addClass('d-none'); }
+function clearTokens(){ localStorage.removeItem('access'); localStorage.removeItem('refresh'); $('#logoutBtn').addClass('d-none'); $('#loginBtnTop').removeClass('d-none'); }
+function ajaxAuth(opts){ const t=getToken(); opts.headers=opts.headers||{}; if(t) opts.headers['Authorization']='Bearer '+t; return $.ajax(opts); }
+
+let PAGE = 1; const PAGE_SIZE = 12;
+let SPAGE = 1; const SPAGE_SIZE = 10;
+
+function cardTemplate(item){
+  const s = item.survey || {}; const dt = new Date(item.submitted_at);
+  return `<div class="col-sm-6 col-lg-4">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex align-items-start justify-content-between">
+          <div>
+            <h6 class="mb-1">${(s.title||'Untitled')}</h6>
+            <div class="text-muted small">code: <code>${s.code||''}</code></div>
+            ${item.respondent_email ? `<div class=\"small\"><i class=\"bi bi-envelope\"></i> ${item.respondent_email}</div>` : ''}
+          </div>
+          <span class="badge bg-success text-capitalize">${item.status||'submitted'}</span>
+        </div>
+      </div>
+      <div class="card-footer d-flex justify-content-between align-items-center small text-muted">
+        <span><i class="bi bi-clock"></i> ${dt.toLocaleString()}</span>
+        <button class="btn btn-sm btn-outline-primary view-btn" data-id="${item.id}"><i class="bi bi-eye"></i> View</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function loadResponses(){
+  const search = ($('#searchBox').val()||'').trim();
+  const params = `?page=${PAGE}&page_size=${PAGE_SIZE}&search=${encodeURIComponent(search)}`;
+  ajaxAuth({ url: ENDPOINTS.dashboard(ORG_ID)+params, method:'GET' }).done((data)=>{
+    const list = (data && data.results) ? data.results : [];
+    const count = data && (data.count||0);
+    $('#cardsRow').empty();
+    if(!list.length){
+      $('#cardsRow').append('<div class="col-12"><div class="card"><div class="card-body text-muted">No submissions yet.</div></div></div>');
+    } else {
+      list.forEach(item => $('#cardsRow').append(cardTemplate(item)) );
+    }
+    $('#countLabel').text(`${count} result${count===1?'':'s'}`);
+    const end = PAGE * PAGE_SIZE; $('#prevBtn').prop('disabled', PAGE<=1); $('#nextBtn').prop('disabled', end>=count);
+    $('#pageDisplay').val(PAGE);
+  }).fail((xhr)=>{
+    if (xhr && xhr.status === 403) {
+      new bootstrap.Modal('#loginModal').show();
+    }
+  });
+}
+
+$('#searchBox').on('input', function(){ clearTimeout(window._dashTimer); window._dashTimer = setTimeout(function(){ PAGE=1; loadResponses(); }, 250); });
+$('#prevBtn').on('click', function(){ if(PAGE>1){ PAGE--; loadResponses(); } });
+$('#nextBtn').on('click', function(){ PAGE++; loadResponses(); });
+
+// View modal
+$(document).on('click', '.view-btn', function(){
+  const id = $(this).data('id');
+  ajaxAuth({ url: API_BASE + '/api/v1/responses/' + id + '/', method:'GET' }).done((data)=>{
+    const s = data.survey || {}; const answers = data.answers || [];
+    const headerTitle = s.title ? s.title : ('Response #' + data.id);
+    const emailLine = data.respondent_email ? ` <span class=\"text-muted small\">• ${data.respondent_email}</span>` : '';
+    $('#respModalLabel').html(headerTitle + emailLine);
+    const $wrap = $('<div class="vstack gap-3"></div>');
+    if (answers.length === 0) {
+      $wrap.append('<div class="text-muted">No answers.</div>');
+    } else {
+      // Group by section
+      const bySection = {};
+      answers.forEach(a=>{ const sec=a.section_title||'Other'; if(!bySection[sec]) bySection[sec]=[]; bySection[sec].push(a); });
+      Object.keys(bySection).forEach(sec => {
+        const $card = $('<div class="card"></div>');
+        const $cb = $('<div class="card-body"></div>');
+        $cb.append(`<h6 class="card-title mb-3">${sec}</h6>`);
+        bySection[sec].forEach(a => {
+          const val = (a.value==null || a.value==='') ? '' : String(a.value);
+          $cb.append(`
+            <div class="mb-3">
+              <label class="form-label small text-muted">${a.question_prompt || a.question_code || ('Q#'+a.question)}</label>
+              <input class="form-control" value="${val.replace(/"/g,'&quot;')}" disabled>
+            </div>
+          `);
+        });
+        $card.append($cb); $wrap.append($card);
+      });
+    }
+    $('#respModalBody').empty().append($wrap);
+    new bootstrap.Modal('#respModal').show();
+  });
+});
+
+$('#loginBtnTop').on('click', function(){ new bootstrap.Modal('#loginModal').show(); });
+$('#logoutBtn').on('click', function(){ clearTokens(); });
+$('#loginBtn').on('click', function(){
+  const username = ($('#loginUsername').val()||'').trim();
+  const password = $('#loginPassword').val();
+  $.ajax({ url: ENDPOINTS.token, method:'POST', contentType:'application/json', data: JSON.stringify({username, password}) })
+    .done((d)=>{ setTokens(d.access, d.refresh); bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide(); loadResponses(); })
+    .fail(()=>{});
+});
+
+$(function(){
+  if (getToken()) { $('#logoutBtn').removeClass('d-none'); $('#loginBtnTop').addClass('d-none'); }
+  ajaxAuth({ url: ENDPOINTS.orgDetail(ORG_ID), method:'GET' }).done((org)=>{ if(org){ if(org.name){ $('#orgTitle').text('Organization: ' + org.name); } if (org.logo){ $('#orgLogo').attr('src', org.logo).show(); } } });
+  loadResponses();
+  loadSurveys();
+});
+
+function renderSurveyRow(s){
+  return `<tr data-id="${s.id}" data-title="${(s.title||'').replace(/"/g,'&quot;')}" data-code="${(s.code||'').replace(/"/g,'&quot;')}"><td>${s.id}</td><td>${s.title||''}</td><td><code>${s.code||''}</code></td><td><span class="badge bg-secondary text-capitalize">${s.status||''}</span></td><td class="text-end"><div class="btn-group btn-group-sm"><button class="btn btn-outline-primary inviteBtn"><i class="bi bi-envelope"></i> Invite</button><button class="btn btn-outline-secondary statusBtn"><i class="bi bi-list-check"></i> Invitation Status</button></div></td></tr>`;
+}
+
+function loadSurveys(){
+  const q = ($('#survSearch').val()||'');
+  ajaxAuth({ url: ENDPOINTS.orgSurveys(ORG_ID, SPAGE, SPAGE_SIZE, q), method:'GET' }).done((resp)=>{
+    const list = (resp && resp.results) ? resp.results : [];
+    $('#surveysTable').empty();
+    if(!list.length){ $('#surveysTable').append('<tr><td colspan="5" class="text-center text-muted py-4">No surveys</td></tr>'); }
+    list.forEach(s => $('#surveysTable').append(renderSurveyRow(s)));
+    const count = (resp && resp.count) || list.length;
+    $('#survCount').text(`${count} survey${count===1?'':'s'}`);
+    const maxPage = Math.max(1, Math.ceil(count / SPAGE_SIZE));
+    $('#sPrev').prop('disabled', SPAGE <= 1);
+    $('#sNext').prop('disabled', SPAGE >= maxPage || list.length === 0);
+  });
+}
+
+$('#survSearch').on('input', function(){ clearTimeout(window._sTimer); window._sTimer = setTimeout(function(){ SPAGE=1; loadSurveys(); }, 250); });
+$('#sPrev').on('click', function(){ if(SPAGE>1){ SPAGE--; loadSurveys(); } });
+$('#sNext').on('click', function(){ SPAGE++; loadSurveys(); });
+
+// Invite modal handlers
+$(document).on('click', '.inviteBtn', function(){
+  const row = $(this).closest('tr'); const sid=row.data('id'); const title=row.data('title')||('Survey #'+sid);
+  $('#invModalTitle').text('Invite to ' + title);
+  $('#invEmails').val(''); $('#invExpiry').val('');
+  $('#invModal').attr('data-survey-id', sid);
+  new bootstrap.Modal('#invModal').show();
+});
+
+$(document).on('click', '#sendInvBtn', function(){
+  const sid = $('#invModal').attr('data-survey-id');
+  const emails = ($('#invEmails').val()||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const expires_at = $('#invExpiry').val();
+  if(!emails.length || !expires_at) return alert('Provide emails and expiry');
+  ajaxAuth({ url: API_BASE + '/api/v1/surveys/' + sid + '/invitations/', method:'POST', contentType:'application/json', data: JSON.stringify({ survey_id: sid, emails, expires_at }) })
+    .done(()=>{ loadInvites(sid); try{ bootstrap.Modal.getInstance(document.getElementById('invModal')).hide(); }catch(e){}; new bootstrap.Modal('#invStatusModal').show(); })
+});
+
+// Invitation status modal (backend-filtered + paginated)
+let INV_PAGE = 1; const INV_PAGE_SIZE = 10; let INV_STATUS = '';
+function loadInvites(sid){
+  const params = `?status=${encodeURIComponent(INV_STATUS||'')}&page=${INV_PAGE}&page_size=${INV_PAGE_SIZE}`;
+  ajaxAuth({ url: API_BASE + '/api/v1/surveys/' + sid + '/invitations/' + params, method:'GET' }).done((resp)=>{
+    const list = (resp && resp.results) ? resp.results : [];
+    const count = (resp && resp.count) || list.length;
+    const $t=$('#invTable').empty();
+    if(!list.length){ $t.append('<tr><td colspan="4" class="text-center text-muted py-3">No invitations</td></tr>'); }
+    list.forEach(i => { $t.append(`<tr><td>${i.email}</td><td class="text-capitalize">${i.status}</td><td>${(new Date(i.expires_at)).toLocaleString()}</td><td><code>${i.token}</code></td></tr>`); });
+    $('#invCount').text(`${count} item${count===1?'':'s'}`);
+    const end = INV_PAGE * INV_PAGE_SIZE;
+    $('#invPrev').prop('disabled', INV_PAGE<=1);
+    $('#invNext').prop('disabled', end>=count);
+  });
+}
+
+$(document).on('click', '.statusBtn', function(){ const sid=$(this).closest('tr').data('id'); $('#invStatusModal').attr('data-survey-id', sid); INV_PAGE=1; INV_STATUS=$('#invFilter').val()||''; loadInvites(sid); new bootstrap.Modal('#invStatusModal').show(); });
+$(document).on('change input', '#invFilter', function(){ INV_STATUS=$(this).val()||''; INV_PAGE=1; const sid=$('#invStatusModal').attr('data-survey-id'); if(sid) loadInvites(sid); });
+$('#invPrev').on('click', function(){ if(INV_PAGE>1){ INV_PAGE--; const sid=$('#invStatusModal').attr('data-survey-id'); if(sid) loadInvites(sid); }});
+$('#invNext').on('click', function(){ INV_PAGE++; const sid=$('#invStatusModal').attr('data-survey-id'); if(sid) loadInvites(sid); });
+</script>
+<!-- Response detail modal -->
+<div class="modal fade" id="respModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="respModalLabel">Response</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body" id="respModalBody"></div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button></div>
+    </div>
+  </div>
+  </div>
+
+<!-- Invite modal -->
+<div class="modal fade" id="invModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title" id="invModalTitle">Invite</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label">Emails</label><textarea id="invEmails" class="form-control" rows="3" placeholder="comma,separated,emails"></textarea></div>
+        <div class="mb-2"><label class="form-label">Expiry</label><input type="datetime-local" id="invExpiry" class="form-control"></div>
+      </div>
+      <div class="modal-footer"><button class="btn btn-secondary" data-bs-dismiss="modal">Close</button><button class="btn btn-primary" id="sendInvBtn">Send</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- Invitation status modal -->
+<div class="modal fade" id="invStatusModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header"><h5 class="modal-title">Invitation Status</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2 d-flex align-items-center gap-2">
+          <label class="form-label mb-0">Filter</label>
+          <select id="invFilter" class="form-select form-select-sm" style="width:200px">
+            <option value="">All</option>
+            <option value="pending">Pending</option>
+            <option value="submitted">Submitted</option>
+            <option value="expired">Expired</option>
+          </select>
+        </div>
+        <div class="table-responsive">
+          <table class="table align-middle mb-0">
+            <thead class="table-light"><tr><th>Email</th><th>Status</th><th>Expires</th><th>Token</th></tr></thead>
+            <tbody id="invTable"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer d-flex justify-content-between align-items-center w-100">
+        <div id="invCount" class="text-muted small">0 items</div>
+        <div class="btn-group btn-group-sm">
+          <button class="btn btn-outline-secondary" id="invPrev">Prev</button>
+          <button class="btn btn-outline-secondary" id="invNext">Next</button>
+        </div>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+<style>
+ .orgbar{ background:#0b7285; }
+</style>
+</html>
+
+

@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Survey</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <style>
+    body { background:#f7f7fb }
+    .panel { background:#fff; border-radius:12px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
+    .hero { background:#fff; border-radius:16px; box-shadow:0 8px 24px rgba(0,0,0,.08); padding:32px }
+    .hero .icon { width:64px; height:64px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; margin-bottom:12px }
+    .hero .icon.success { background:#e6f4ea; color:#198754 }
+    .hero .icon.warning { background:#fff3cd; color:#856404 }
+    .hero .icon.danger { background:#f8d7da; color:#842029 }
+    .sec { background:#fff; border:1px solid #e9ecef; border-radius:12px; padding:16px; margin-bottom:16px }
+    .sec-title { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px }
+    .sec-index { width:28px; height:28px; border-radius:50%; background:#f1f3f5; color:#495057; display:inline-flex; align-items:center; justify-content:center; font-weight:600; font-size:.85rem }
+  </style>
+</head>
+<body>
+  <main class="container py-4">
+    <div id="submittedWrap" class="d-none">
+      <div class="hero text-center">
+        <h4 id="swTitle" class="mb-2"></h4>
+        <div id="statusIcon" class="icon success d-inline-flex mb-2"></div>
+        <h4 id="statusTitle" class="mb-1">Thanks for your response!</h4>
+        <p id="statusDesc" class="text-muted mb-0">You have already submitted this survey.</p>
+        <div class="mt-3 d-flex align-items-center gap-2 justify-content-start text-muted small">
+          <img id="swFooterLogo" src="" alt="logo" class="rounded" style="width:20px;height:20px;object-fit:cover;display:none;">
+          <span id="swFooterOrgName"></span>
+        </div>
+      </div>
+    </div>
+
+    <div id="companyPanel" class="panel p-3 mb-3 d-flex align-items-center gap-3">
+      <img id="orgLogo" src="" alt="logo" class="rounded" style="width:40px;height:40px;object-fit:cover;display:none;">
+      <div>
+        <h5 id="surveyTitle" class="mb-0"></h5>
+        <div class="text-muted" id="surveyOrgName"></div>
+      </div>
+      <div class="ms-auto small text-muted">Session: <span id="sessionId">—</span></div>
+    </div>
+
+    <div class="panel p-3" id="surveyPanel">
+      <div id="surveyEmpty" class="text-muted">Loading…</div>
+      <form id="surveyForm" class="d-none"></form>
+      <div class="d-none mt-3" id="navButtons">
+        <button class="btn btn-outline-primary" id="saveBtn">Save Progress</button>
+        <button class="btn btn-success" id="submitBtn">Submit</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- Toasts -->
+  <div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+    <div id="toast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+      <div class="toast-header">
+        <strong class="me-auto" id="toastTitle">Notice</strong>
+        <small class="text-muted" id="toastTime">Just now</small>
+        <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+      <div class="toast-body" id="toastBody">Hello!</div>
+    </div>
+  </div>
+
+<script>
+const API_BASE = "http://127.0.0.1:8000";
+const ENDPOINTS = {
+  surveyDetailByCode: (code) => API_BASE + "/api/v1/surveys/code/" + encodeURIComponent(code) + "/detail/",
+  startSession: API_BASE + "/api/v1/sessions/sessions/start/",
+  autosave: (sid) => API_BASE + "/api/v1/sessions/sessions/" + sid + "/autosave/",
+  complete: (sid) => API_BASE + "/api/v1/sessions/sessions/" + sid + "/complete/",
+  submit: API_BASE + "/api/v1/responses/submit/",
+};
+
+const SURVEY_CODE = "{{ survey_code|default:'' }}";
+const INVITE_STATUS = "{{ invite_status|default:'' }}";
+function setStatusUI(kind){
+  const icon = document.getElementById('statusIcon');
+  const titleEl = document.getElementById('statusTitle');
+  const descEl = document.getElementById('statusDesc');
+  let cls='success', title='', desc='', svg='';
+  if (kind === 'submitted'){
+    cls='success'; title='Thanks for your response!'; desc='You have already submitted this survey.';
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16"><path d="M13.485 1.929a.75.75 0 0 1 0 1.06l-7.07 7.072-3.182-3.182a.75.75 0 0 1 1.06-1.06l2.122 2.122 6.01-6.012a.75.75 0 0 1 1.06 0Z"/></svg>';
+  } else if (kind === 'expired'){
+    cls='warning'; title='Invitation expired'; desc='This invitation has expired.';
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16"><path d="M8 3.5a.5.5 0 0 1 .5.5v3.25l2.25 1.35a.5.5 0 1 1-.5.866l-2.5-1.5A.5.5 0 0 1 7.5 7V4a.5.5 0 0 1 .5-.5z"/><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/></svg>';
+  } else if (kind === 'invalid'){
+    cls='danger'; title='Invalid invitation'; desc='Invalid survey invitation.';
+    svg = '<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16"><path d="M7.938 2.016a.13.13 0 0 1 .124 0l6.857 3.94c.083.048.083.168 0 .216L8.062 10.11a.13.13 0 0 1-.124 0L1.081 6.172a.125.125 0 0 1 0-.216l6.857-3.94z"/></svg>';
+  }
+  icon.className = 'icon d-inline-flex mb-2 ' + cls;
+  icon.innerHTML = svg;
+  titleEl.textContent = title;
+  descEl.textContent = desc;
+  $('#surveyPanel').addClass('d-none');
+  $('#companyPanel').addClass('d-none');
+  $('#submittedWrap').removeClass('d-none');
+}
+let SURVEY = null;
+let SESSION_ID = null;
+let CURRENT_STEP = 0;
+let AUTOSAVE_TIMER = null;
+let CODE_TO_QTYPE = {};
+
+function notify(title, body){
+  document.getElementById('toastTitle').textContent = title;
+  document.getElementById('toastBody').textContent = body;
+  document.getElementById('toastTime').textContent = new Date().toLocaleTimeString();
+  new bootstrap.Toast(document.getElementById('toast')).show();
+}
+
+function getSessionKey(){ return `survey_session_${SURVEY_CODE}`; }
+function getSubmittedKey(){ return `survey_submitted_${SURVEY_CODE}`; }
+function persistSession(id){ sessionStorage.setItem(getSessionKey(), String(id)); }
+function clearPersistedSession(){ sessionStorage.removeItem(getSessionKey()); sessionStorage.removeItem(getSubmittedKey()); }
+function loadPersistedSession(){ const v=sessionStorage.getItem(getSessionKey()); return v?parseInt(v,10):null; }
+function loadSubmittedFlag(){ return sessionStorage.getItem(getSubmittedKey()) === '1'; }
+function markSubmitted(){ sessionStorage.setItem(getSubmittedKey(), '1'); }
+
+function renderSurvey(data){
+  $('#surveyTitle').text(data.title||'');
+  if (data.organization && (data.organization.logo||'').length){ $('#orgLogo').attr('src', data.organization.logo).show(); $('#surveyOrgName').text(data.organization.name||''); }
+  $('#surveyEmpty').addClass('d-none'); $('#surveyForm').removeClass('d-none').empty(); $('#navButtons').removeClass('d-none');
+  const sections = data.sections||[];
+  const $form = $('#surveyForm').empty();
+  sections.forEach((sec, idx) => {
+    const secBodyId = `sec_body_${sec.id}`;
+    const card = $(`
+      <div class=\"sec\">
+        <div class=\"sec-title\">
+          <div class=\"d-flex align-items-center gap-2\">
+            <span class=\"sec-index\">${idx+1}</span>
+            <h6 class=\"mb-0\">${sec.title}</h6>
+          </div>
+        </div>
+        <div id=\"${secBodyId}\"></div>
+      </div>
+    `);
+    $form.append(card);
+    const $body = card.find(`#${secBodyId}`);
+    (sec.questions||[]).forEach(q=>{ $body.append(renderQuestion(q)); CODE_TO_QTYPE[q.code] = q.type; });
+  });
+  updateButtons(data);
+  // dynamic autosave on input/select
+  $('#surveyForm').off('input.autosave change.autosave').on('input.autosave change.autosave', 'input, textarea, select', function(){
+    if (!SESSION_ID) return;
+    if (AUTOSAVE_TIMER) clearTimeout(AUTOSAVE_TIMER);
+    AUTOSAVE_TIMER = setTimeout(function(){
+      const payload = { partial_payload: serialize() };
+      $.ajax({ url: ENDPOINTS.autosave(SESSION_ID), method:'PATCH', contentType:'application/json', data: JSON.stringify(payload) });
+    }, 500);
+    evaluateAll();
+  });
+  evaluateAll();
+}
+
+function renderQuestion(q){
+  const wrap = $(`<div class="mb-3" data-qcode="${q.code}" data-qtype="${q.type}" data-constraints='${JSON.stringify(q.constraints||{})}' data-required='${q.required?"1":"0"}'></div>`);
+  wrap.append(`<label class="form-label">${q.prompt}${q.required? ' <span class="text-danger">*</span>':''}</label>`);
+  if(q.type==='text'){ wrap.append(`<input type="text" class="form-control" />`); }
+  else if(q.type==='number'){ wrap.append(`<input type="number" class="form-control" />`); }
+  else if(q.type==='date'){ wrap.append(`<input type="date" class="form-control" />`); }
+  else if(q.type==='dropdown'){
+    const sel=$('<select class="form-select"><option value="">— select —</option></select>');
+    (q.options||[]).forEach(o=> sel.append(`<option value="${o.value}">${o.label}</option>`));
+    wrap.append(sel);
+  } else if(q.type==='radio'){
+    const g=$('<div></div>'); (q.options||[]).forEach((o,i)=> g.append(`<div class="form-check"><input class="form-check-input" type="radio" name="${q.code}" id="${q.code}_${i}" value="${o.value}"><label class="form-check-label" for="${q.code}_${i}">${o.label}</label></div>`)); wrap.append(g);
+  } else if(q.type==='checkbox'){
+    const g=$('<div></div>'); (q.options||[]).forEach((o,i)=> g.append(`<div class="form-check"><input class="form-check-input" type="checkbox" name="${q.code}" id="${q.code}_${i}" value="${o.value}"><label class="form-check-label" for="${q.code}_${i}">${o.label}</label></div>`)); wrap.append(g);
+  }
+  wrap.append(`<div class="form-text text-danger small d-none validation-msg"></div>`);
+  return wrap;
+}
+
+function evaluateAll(){
+  const answers = serialize();
+  $('[data-qcode]').each(function(){
+    const $wrap = $(this);
+    const code = $wrap.data('qcode');
+    const type = $wrap.data('qtype');
+    let constraints = {};
+    try { constraints = JSON.parse($wrap.attr('data-constraints')||'{}'); } catch(e) { constraints = {}; }
+    // show_if
+    let visible = true;
+    if (constraints && constraints.show_if && typeof constraints.show_if === 'object'){
+      const c = constraints.show_if; const ref = c.question_code; const op = (c.operator||'==').trim(); const targetRaw = c.value;
+      const refType = CODE_TO_QTYPE[ref] || 'text';
+      const leftRaw = answers[ref];
+      let left = leftRaw, right = targetRaw;
+      try {
+        if (refType === 'number'){ left = (leftRaw===undefined||leftRaw===null||leftRaw==='')? null : Number(leftRaw); right = Number(targetRaw); }
+        else if (refType === 'date'){ left = leftRaw? new Date(String(leftRaw)) : null; right = new Date(String(targetRaw)); }
+        else { left = leftRaw!==undefined && leftRaw!==null ? String(leftRaw) : null; right = targetRaw!==undefined && targetRaw!==null ? String(targetRaw) : null; }
+      } catch(e){ left = null; right = null; }
+      const OPS = { '=': (a,b)=>a===b, '==': (a,b)=>a===b, '!=': (a,b)=>a!==b, '<': (a,b)=>a<b, '<=': (a,b)=>a<=b, '>': (a,b)=>a>b, '>=': (a,b)=>a>=b };
+      const fn = OPS[op];
+      visible = fn && left!==null && right!==null ? !!fn(left,right) : false;
+    }
+    $wrap.toggleClass('d-none', !visible);
+    if (!visible){ $wrap.find('.validation-msg').addClass('d-none').text(''); return; }
+    validateQuestion($wrap, type, constraints);
+  });
+}
+
+function isPresent(val){ if (val===null || val===undefined) return false; if (Array.isArray(val)) return val.length>0; return String(val).trim() !== ''; }
+
+function validateQuestion($wrap, type, constraints){
+  const code = $wrap.data('qcode');
+  const valueMap = serialize();
+  const val = valueMap[code];
+  const $msg = $wrap.find('.validation-msg');
+  let error = '';
+  const c = constraints || {};
+  if (type==='text'){
+    const s = val==null? '': String(val);
+    if (c.min_length!=null && s.length < Number(c.min_length)) error = `Must be at least ${c.min_length} characters`;
+    if (!error && c.max_length!=null && s.length > Number(c.max_length)) error = `Must be at most ${c.max_length} characters`;
+    if (!error && c.pattern){ try { const re = new RegExp(c.pattern); if (!re.test(s)) error = c.error_message || 'Invalid format'; } catch(e){} }
+  } else if (type==='number'){
+    if (isPresent(val)){
+      const n = Number(val);
+      if (c.min_value!=null && !(n >= Number(c.min_value))) error = `Must be >= ${c.min_value}`;
+      if (!error && c.max_value!=null && !(n <= Number(c.max_value))) error = `Must be <= ${c.max_value}`;
+      if (!error && c.step && c.step!=0){ const base = Number(c.min_value||0); const rem = ((n - base) % Number(c.step)); if (rem !== 0) error = `Must be in steps of ${c.step}`; }
+    }
+  } else if (type==='date'){
+    if (isPresent(val)){
+      const d = new Date(String(val));
+      if (c.min_date && d < new Date(String(c.min_date))) error = `Date must be on/after ${c.min_date}`;
+      if (!error && c.max_date && d > new Date(String(c.max_date))) error = `Date must be on/before ${c.max_date}`;
+    }
+  } else if (type==='dropdown' || type==='radio'){
+    const count = isPresent(val) ? 1 : 0;
+    if (c.min_selected!=null && count < Number(c.min_selected)) error = `Select at least ${c.min_selected}`;
+    if (!error && c.max_selected!=null && count > Number(c.max_selected)) error = `Select at most ${c.max_selected}`;
+  } else if (type==='checkbox'){
+    const count = Array.isArray(val) ? val.length : 0;
+    if (c.min_selected!=null && count < Number(c.min_selected)) error = `Select at least ${c.min_selected}`;
+    if (!error && c.max_selected!=null && count > Number(c.max_selected)) error = `Select at most ${c.max_selected}`;
+  }
+  if (error){ $msg.text(error).removeClass('d-none'); } else { $msg.text('').addClass('d-none'); }
+}
+
+function serialize(){
+  const out={};
+  $('[data-qcode]').each(function(){
+    const $el=$(this); const code=$el.data('qcode'); const type=$el.data('qtype');
+    if(type==='checkbox'){ const vals=[]; $el.find('input[type=checkbox]:checked').each(function(){ vals.push($(this).val()); }); out[code]=vals; }
+    else if(type==='radio'){ out[code]=$el.find('input[type=radio]:checked').val() || null; }
+    else if(type==='dropdown'){ out[code]=$el.find('select').val() || null; }
+    else { out[code]=$el.find('input,textarea').val() || null; }
+  });
+  return out;
+}
+
+function updateButtons(){ $('#submitBtn').removeClass('d-none'); }
+
+function startSession(survey){
+  return $.ajax({ url: ENDPOINTS.startSession, method:'POST', contentType:'application/json', data: JSON.stringify({ survey_id: survey.id, organization_id: (survey.organization && survey.organization.id) || null, last_step: CURRENT_STEP }) });
+}
+
+function applyDraftToForm(draft){
+  if (!draft) return;
+  for (const [code, val] of Object.entries(draft||{})){
+    const $wrap = $(`[data-qcode='${code}']`);
+    if(!$wrap.length) continue;
+    const type = $wrap.data('qtype');
+    if(type==='checkbox' && Array.isArray(val)){
+      val.forEach(v=> $wrap.find(`input[type=checkbox][value='${String(v).replace(/'/g,"\\'")}']`).prop('checked', true));
+    } else if(type==='radio'){
+      $wrap.find(`input[type=radio][value='${String(val).replace(/'/g,"\\'")}']`).prop('checked', true);
+    } else if(type==='dropdown'){
+      $wrap.find('select').val(val||'');
+    } else {
+      $wrap.find('input,textarea').val(val||'');
+    }
+  }
+}
+
+$(function(){
+  const existing = loadPersistedSession();
+  const alreadySubmitted = loadSubmittedFlag();
+  // Handle invite status flags preemptively
+  if (INVITE_STATUS === 'invalid'){ setStatusUI('invalid'); return; }
+  if (INVITE_STATUS === 'submitted'){ setStatusUI('submitted'); return; }
+  if (INVITE_STATUS === 'expired'){ setStatusUI('expired'); return; }
+
+  $.ajax({ url: ENDPOINTS.surveyDetailByCode(SURVEY_CODE), method:'GET' }).done((data)=>{
+    SURVEY=data; renderSurvey(data);
+    if(alreadySubmitted){
+      $('#surveyPanel').addClass('d-none');
+      $('#companyPanel').addClass('d-none');
+      // mirror header info into submitted panel (footer-sized)
+      $('#swTitle').text(data.title||'');
+      $('#swFooterOrgName').text((data.organization && data.organization.name)||'');
+      if (data.organization && (data.organization.logo||'').length){ $('#swFooterLogo').attr('src', data.organization.logo).show(); }
+      $('#submittedWrap').removeClass('d-none');
+      if(existing){ SESSION_ID=existing; $('#sessionId').text(existing); }
+      return;
+    }
+    if(existing){
+      SESSION_ID=existing; $('#sessionId').text(existing);
+      // fetch draft and apply
+      $.ajax({ url: ENDPOINTS.autosave(existing).replace('/autosave/','/'), method:'GET' })
+        .done((sess)=>{ applyDraftToForm(sess.partial_payload||{}); });
+    } else {
+      // token flow via ?token=... (invitation)
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      const payload = { survey_id: data.id, organization_id: (data.organization && data.organization.id) || null };
+      if (token) payload.token = token;
+      $.ajax({ url: ENDPOINTS.startSession, method:'POST', contentType:'application/json', data: JSON.stringify(payload) })
+        .done((s)=>{ SESSION_ID=s.id; persistSession(SESSION_ID); $('#sessionId').text(SESSION_ID); $('#submitBtn').prop('disabled', false).removeClass('d-none'); })
+        .fail((xhr)=>{ let msg='Unable to start session'; try{ msg = (xhr.responseJSON && xhr.responseJSON.detail) || xhr.responseText || msg; }catch(e){}; $('#surveyPanel').addClass('d-none'); notify('Invitation', msg); });
+    }
+  });
+
+  $('#saveBtn').on('click', function(){ if(!SESSION_ID) return; const payload={ partial_payload: serialize() }; $.ajax({ url: ENDPOINTS.autosave(SESSION_ID), method:'PATCH', contentType:'application/json', data: JSON.stringify(payload) }); });
+  $('#submitBtn').on('click', function(){ const draft=serialize();
+    // Prefer session-based submit to ensure invitation linkage
+    const payload = SESSION_ID ? { session_id: SESSION_ID, answers: draft } : { survey_id: SURVEY.id, answers: draft };
+    $.ajax({ url: ENDPOINTS.submit, method:'POST', contentType:'application/json', data: JSON.stringify(payload) })
+    .done(()=>{ 
+      markSubmitted();
+      // Immediately clear only the session id so a new run starts fresh
+      try { sessionStorage.removeItem(getSessionKey()); } catch(e) {}
+      // mirror organization info into submitted footer chip
+      $('#swFooterOrgName').text((SURVEY.organization && SURVEY.organization.name) || '');
+      if (SURVEY.organization && (SURVEY.organization.logo||'').length){ $('#swFooterLogo').attr('src', SURVEY.organization.logo).show(); }
+      // hide panels and show thank-you
+      $('#surveyPanel').addClass('d-none');
+      $('#companyPanel').addClass('d-none');
+      $('#submittedWrap').removeClass('d-none');
+    })
+    .fail((xhr)=>{
+      let msg = 'Submit failed';
+      try { msg = (xhr.responseJSON && (xhr.responseJSON.detail || xhr.responseJSON.error)) || xhr.responseText || msg; } catch(e) {}
+      notify('Validation', String(msg||'Submit failed'));
+    }); });
+  // Removed new submission button for invitation flow
+
+  // keep submit button enabled at all times
+});
+</script>
+</body>
+</html>
+
