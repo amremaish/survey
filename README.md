@@ -201,7 +201,16 @@ python manage.py runserver
 celery -A survey.celery:celery_app worker --loglevel=INFO
 celery -A survey.celery:celery_app beat --loglevel=INFO
 ```
-
+## Continuous Integration (CI)
+- GitHub Actions workflow at `.github/workflows/tests.yml` runs on every push and pull request.
+- Uses Python 3.12 (alpine container) and forces a lightweight test environment:
+  - `DB_ENGINE=django.db.backends.sqlite3`
+  - `DB_NAME` points to a workspace-local SQLite file
+  - `CACHE_BACKEND=django.core.cache.backends.locmem.LocMemCache`
+  - `CELERY_EAGER=1` (run Celery tasks synchronously)
+  - `EMAIL_BACKEND=django.core.mail.backends.console.EmailBackend`
+- Steps: install deps, run `python manage.py migrate --noinput`, then `python manage.py test -v 2`.
+- View results in the Actions tab; logs include full test output.
 
 ## License
 Proprietary. All rights reserved (update as appropriate).
